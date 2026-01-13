@@ -41,6 +41,10 @@ jobs:
         run: npm ci
       - name: Build
         run: npm run build
+        env:
+          NEXT_PUBLIC_BASE_PATH: /my-site
+      - name: Add .nojekyll file
+        run: touch ./out/.nojekyll
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

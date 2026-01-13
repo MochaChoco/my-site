@@ -9,7 +9,11 @@ export async function generateStaticParams() {
   }));
 }
 
-export async function generateMetadata({ params }: { params: Promise<{ tag: string }> }) {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ tag: string }>;
+}) {
   const { tag } = await params;
   return {
     title: `Posts tagged "${tag}"`,
@@ -17,7 +21,11 @@ export async function generateMetadata({ params }: { params: Promise<{ tag: stri
   };
 }
 
-export default async function TagPage({ params }: { params: Promise<{ tag: string }> }) {
+export default async function TagPage({
+  params,
+}: {
+  params: Promise<{ tag: string }>;
+}) {
   const { tag } = await params;
   const decodedTag = decodeURIComponent(tag);
   const posts = await getPostsByTag(decodedTag);
@@ -27,13 +35,13 @@ export default async function TagPage({ params }: { params: Promise<{ tag: strin
   }
 
   return (
-    <div className="space-y-10 max-w-2xl mx-auto">
+    <div className="space-y-10 max-w-4xl mx-auto">
       <div className="space-y-4">
         <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl">
           #{decodedTag}
         </h1>
         <p className="text-xl text-muted-foreground">
-          {posts.length} {posts.length === 1 ? 'post' : 'posts'} found.
+          {posts.length} {posts.length === 1 ? "post" : "posts"} found.
         </p>
       </div>
       <hr />

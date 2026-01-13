@@ -8,14 +8,12 @@ export default async function TagsPage() {
   const tags = await getAllTags();
 
   return (
-    <div className="max-w-2xl mx-auto space-y-10">
+    <div className="max-w-4xl mx-auto space-y-10">
       <div className="space-y-4">
         <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl">
           Tags
         </h1>
-        <p className="text-xl text-muted-foreground">
-          Browse posts by topic.
-        </p>
+        <p className="text-xl text-muted-foreground">Browse posts by topic.</p>
       </div>
       <hr />
       <div className="flex flex-wrap gap-4">

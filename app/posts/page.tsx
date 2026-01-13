@@ -8,7 +8,7 @@ export default async function PostsPage() {
   const posts = await getAllPosts();
 
   return (
-    <div className="space-y-10 max-w-2xl mx-auto">
+    <div className="space-y-10 max-w-4xl mx-auto">
       <div className="space-y-4">
         <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl">
           All Posts

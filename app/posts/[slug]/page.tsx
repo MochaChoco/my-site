@@ -104,16 +104,8 @@ const components = {
   ),
   // Override img to handle basePath for static exports
   img: ({ src, alt, ...props }: any) => {
-    const imageSrc = src?.startsWith("/")
-      ? `${assetBasePath}${src}`
-      : src;
-    return (
-      <img
-        src={imageSrc}
-        alt={alt || ""}
-        {...props}
-      />
-    );
+    const imageSrc = src?.startsWith("/") ? `${assetBasePath}${src}` : src;
+    return <img src={imageSrc} alt={alt || ""} {...props} />;
   },
 };
 
@@ -130,7 +122,7 @@ export default async function PostPage({
   }
 
   return (
-    <article className="max-w-2xl mx-auto py-10">
+    <article className="max-w-4xl lg:max-w-4xl mx-auto py-10">
       <div className="space-y-4 mb-10 text-center">
         <h1 className="text-4xl font-extrabold tracking-tight lg:text-5xl">
           {post.frontmatter.title}

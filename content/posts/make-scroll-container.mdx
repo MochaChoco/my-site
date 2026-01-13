@@ -1,0 +1,244 @@
+---
+title: "프론트엔드 사용자 경험 개선: 드래그 스크롤 컨테이너 개발기"
+description: "스크롤 컨테이너를 개발하여 PC 환경에서도 사용자 경험을 공유했던 사례를 소개합니다."
+date: "2025-01-02"
+tags: ["vue", "ux"]
+slug: "make-scroll-container"
+coverImage: "/images/posts/make-scroll-container/cover.jpg"
+---
+
+![커버 이미지](/images/posts/make-scroll-container/cover.jpg)
+
+안녕하세요. 가로 스크롤이 필요한 UI를 개발하면서 겪었던 문제와 이를 해결하기 위해 재사용 가능한 `ScrollContainer` 컴포넌트를 개발한 경험을 공유하고자 합니다.
+
+프로젝트를 진행하면서 특정 UI 패턴이 반복적으로 등장하는 것을 발견했습니다. 바로 카드 리스트, 이미지 갤러리, 카테고리 태그와 같이 가로로 긴 콘텐츠들을 보여줄 때, 사용자가 스크롤하여 다른 콘텐츠를 탐색할 수 있도록 하는 기능이었죠. 처음에는 각 컴포넌트마다 `overflow-x: scroll`과 함께 `hidden-scrollbar` 믹스인을 사용하여 가로 스크롤을 구현했습니다. 하지만 이 방식은 몇 가지 아쉬운 점이 있었습니다.
+
+첫째, 여러 컴포넌트에서 비슷한 스크롤 관련 CSS와 로직이 중복되어 코드 유지보수성이 떨어졌습니다. 기능 추가나 변경이 필요할 때마다 여러 파일을 수정해야 했죠. 둘째, PC 환경에서는 마우스 휠 스크롤만 가능했기 때문에, 모바일에서 손가락으로 스와이프하듯이 콘텐츠를 직관적으로 드래그하여 탐색하는 경험을 제공하고 싶었습니다. 이러한 고민 끝에, 공통된 스크롤 및 드래그 기능을 캡슐화한 재사용 가능한 컴포넌트의 필요성을 절감하게 되었고, `ScrollContainer`의 개발로 이어졌습니다.
+
+## 스크롤과 드래그, 그리고 컴포넌트의 탄생
+
+`ScrollContainer`는 단순히 가로 스크롤 기능을 제공하는 것을 넘어, PC 환경에서 마우스 드래그를 통해 콘텐츠를 좌우로 탐색할 수 있는 인터랙션을 구현하는 것을 목표로 했습니다. 이러한 기능을 하나의 컴포넌트에 모음으로써, 기존에 흩어져 있던 스크롤 관련 로직을 제거하고, 개발 효율성과 사용자 경험이라는 두 마리 토끼를 잡을 수 있었죠. 이 과정에서 Vue.js의 강력한 컴포넌트 시스템과 Composition API, 그리고 JavaScript의 DOM 조작 및 이벤트 핸들링 기법을 적극 활용했습니다.
+
+### Vue.js 컴포넌트 시스템과 재사용성
+
+Vue.js의 컴포넌트 시스템은 재사용 가능하고 독립적인 UI 조각을 구축하는 데 핵심적인 역할을 합니다. `ScrollContainer` 컴포넌트는 가로 스크롤 및 드래그라는 특정 UI 동작을 완전히 캡슐화하여, 어떤 리스트 콘텐츠든 이 컴포넌트 안에 넣어주면 해당 기능을 즉시 사용할 수 있도록 설계되었습니다. 이는 [Vue.js 공식 문서에서 설명하는 컴포넌트의 기본적인 장점](https://vuejs.org/guide/essentials/component-basics.html)인 코드 재사용성 및 유지보수성을 극대화하는 좋은 예시라고 생각합니다. 카드 리스트, 이미지 갤러리, 카테고리 태그 등을 보여주는 여러 컴포넌트들은 이제 직접 스크롤 로직을 신경 쓸 필요 없이, 단지 `ScrollContainer`로 콘텐츠를 감싸는 것만으로도 원하는 기능을 얻게 되었습니다.
+
+### Composition API로 로직 구성
+
+`ScrollContainer` 내부의 로직은 Vue 3의 Composition API를 사용하여 구성되었습니다. `<script setup>` 문법을 활용하여 컴포넌트의 상태(`isDown`, `isDragging` 등)와 생명주기 훅(`onMounted`, `onUnmounted`)을 선언적으로 정의했습니다. 특히 `onMounted` 훅에서 필요한 이벤트 리스너를 등록하고, `onUnmounted` 훅에서 이 리스너들을 깔끔하게 제거하여 메모리 누수를 방지하는 것은 [Composition API 사용 시 권장되는 모범 사례](https://vuejs.org/guide/extras/composition-api-faq.html)입니다. 고유한 ID를 생성하는 `useId()` 컴포저블을 활용하여, 각 `ScrollContainer` 인스턴스가 독립적으로 작동하도록 안정성을 높인 점도 주목할 만합니다.
+
+### 섬세한 JavaScript 이벤트 핸들링으로 드래그 기능 구현
+
+PC에서 마우스 드래그를 통한 스크롤은 모바일의 스와이프와 유사한 직관적인 사용자 경험을 제공합니다. 이를 구현하기 위해 `mousedown`, `mousemove`, `mouseup`, `mouseleave` 이벤트를 정교하게 다루었습니다. 각 이벤트 객체는 중요한 정보를 담고 있으며, `stopPropagation()`과 `preventDefault()` 메서드를 통해 이벤트 흐름을 제어할 수 있습니다.
+`isDown` 플래그는 마우스 버튼이 눌린 상태인지를, `isDragging` 플래그는 실제로 드래그 동작이 발생했는지를 나타냅니다. 특히 `THRESHOLD` 값은 미세한 마우스 움직임이 드래그로 오인되는 것을 방지하기 위해 도입되었습니다. 드래그 동작 후에는 `isDragging` 플래그를 확인하고 `click` 이벤트의 캡처 단계(`addEventListener`의 세 번째 인자 `true`)에서 `preventDefault()`와 `stopPropagation()`을 호출하여 의도치 않은 클릭 이벤트를 차단합니다. 이는 사용자 인터랙션의 정확성과 안정성을 높이는 데 필수적인 고려사항입니다.
+
+### CSS `overflow-x`, `cursor`, 그리고 스크롤바 관리
+
+`ScrollContainer`는 가로 스크롤을 위해 `overflow-x: scroll` CSS 속성을 사용하고, `@include hidden-scrollbar` SCSS 믹스인을 통해 스크롤바를 시각적으로 숨깁니다. 이를 통해 깔끔한 UI를 유지하면서도 스크롤 기능은 그대로 제공합니다.
+
+또한 `cursor` 속성을 활용하여 드래그 가능한 영역임을 사용자에게 직관적으로 알립니다. 평상시에는 `cursor: grab`을 표시하고, 드래그 중에는 `cursor: grabbing`으로 변경하여 현재 상태를 명확히 전달합니다. 이러한 시각적 피드백은 사용자 경험을 크게 향상시킵니다.
+
+## `ScrollContainer` 구현
+
+먼저 `ScrollContainer` 컴포넌트의 핵심 구현을 살펴보겠습니다.
+
+### 1. 드래그 스크롤 핵심 구현
+
+#### 템플릿 구조
+
+```vue
+<template>
+  <div :id="`scroll-container-${id}`" class="scroll-container">
+    <div class="inner-container">
+      <slot></slot>
+    </div>
+  </div>
+</template>
+```
+
+#### 드래그 이벤트 처리
+
+```typescript
+<script lang="ts" setup>
+const id = useId();
+const THRESHOLD = 5; // 드래그 감지 임계값
+
+onMounted(() => {
+  const scrollContainer = document.getElementById(`scroll-container-${id}`);
+
+  let isDown = false;
+  let isDragging = false;
+  let startX = 0;
+  let scrollLeftValue = 0;
+
+  const handleMouseDown = (e: MouseEvent) => {
+    isDown = true;
+    scrollContainer.classList.add("active");
+    startX = e.pageX - scrollContainer.offsetLeft;
+    scrollLeftValue = scrollContainer.scrollLeft;
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!isDown) return;
+    const x = e.pageX - scrollContainer.offsetLeft;
+    const walk = (x - startX) * 2; // 스크롤 속도 배수
+
+    if (Math.abs(x - startX) > THRESHOLD) {
+      isDragging = true;
+    }
+    scrollContainer.scrollLeft = scrollLeftValue - walk;
+  };
+
+  const handleMouseUp = () => {
+    isDown = false;
+    scrollContainer.classList.remove("active");
+  };
+
+  // 드래그 후 클릭 이벤트 차단
+  const handleClick = (e: MouseEvent) => {
+    if (isDragging) {
+      e.preventDefault();
+      e.stopPropagation();
+      isDragging = false;
+    }
+  };
+
+  scrollContainer.addEventListener("mousedown", handleMouseDown);
+  scrollContainer.addEventListener("mousemove", handleMouseMove);
+  scrollContainer.addEventListener("mouseup", handleMouseUp);
+  scrollContainer.addEventListener("mouseleave", handleMouseUp);
+  scrollContainer.addEventListener("click", handleClick, true);
+
+  onUnmounted(() => {
+    scrollContainer.removeEventListener("mousedown", handleMouseDown);
+    scrollContainer.removeEventListener("mousemove", handleMouseMove);
+    scrollContainer.removeEventListener("mouseup", handleMouseUp);
+    scrollContainer.removeEventListener("mouseleave", handleMouseUp);
+    scrollContainer.removeEventListener("click", handleClick, true);
+  });
+});
+</script>
+```
+
+#### 스타일링
+
+```scss
+<style lang="scss" scoped>
+.scroll-container {
+  overflow-x: scroll;
+  @include hidden-scrollbar;
+
+  &.active {
+    cursor: grabbing;
+  }
+
+  .inner-container {
+    cursor: grab;
+    display: inline-block;
+    width: max-content;
+  }
+}
+
+@include media-query($breakpoint-desktop1) {
+  .scroll-container {
+    .inner-container {
+      cursor: initial; // 큰 화면에서는 기본 커서 사용
+    }
+  }
+}
+</style>
+```
+
+**핵심 구현 포인트**
+
+1. **상태 관리**: `isDown`(마우스 눌림), `isDragging`(실제 드래그 발생), `startX`(시작 좌표), `scrollLeftValue`(시작 스크롤 위치)로 드래그 상태를 추적합니다.
+
+2. **드래그 감지**: `THRESHOLD` 값을 사용해 미세한 마우스 움직임과 실제 드래그를 구분합니다.
+
+3. **스크롤 계산**: `walk` 값(이동 거리 × 2)을 계산하여 부드러운 드래그 경험을 제공합니다.
+
+4. **클릭 이벤트 차단**: 드래그 후 의도치 않은 클릭을 방지하기 위해 캡처 단계에서 이벤트를 가로챕니다.
+
+5. **메모리 관리**: `onUnmounted`에서 모든 이벤트 리스너를 정리하여 메모리 누수를 방지합니다.
+
+---
+
+### 2. 사용 방법
+
+`ScrollContainer`를 도입하면 개별 컴포넌트에서 스크롤 관련 로직과 스타일을 모두 제거할 수 있습니다.
+
+#### Before: 기존 가로 스크롤 처리
+
+```vue
+<template>
+  <div class="item-list-container">
+    <ItemCard v-for="item in items" :key="item.id" :item="item" />
+  </div>
+</template>
+
+<style lang="scss" scoped>
+.item-list-container {
+  display: flex;
+  column-gap: 8px;
+  overflow-x: scroll;
+  @include hidden-scrollbar;
+}
+</style>
+```
+
+#### After: `ScrollContainer` 적용 후
+
+```vue
+<template>
+  <ScrollContainer>
+    <div class="item-list-container">
+      <ItemCard v-for="item in items" :key="item.id" :item="item" />
+    </div>
+  </ScrollContainer>
+</template>
+
+<script lang="ts" setup>
+import ScrollContainer from "@/components/ScrollContainer.vue";
+</script>
+
+<style lang="scss" scoped>
+.item-list-container {
+  display: flex;
+  column-gap: 8px;
+  // overflow-x, hidden-scrollbar 제거됨
+}
+</style>
+```
+
+`ScrollContainer`를 도입한 후, 스크롤 관련 CSS가 모두 제거되어 컴포넌트가 콘텐츠 표시에만 집중할 수 있게 되었습니다. 이제 스크롤 방식이나 드래그 로직을 변경해야 할 때, `ScrollContainer.vue` 파일만 수정하면 됩니다.
+
+---
+
+## 결과 및 효과
+
+![결과 이미지](/images/posts/make-scroll-container/image1.gif)
+
+`ScrollContainer` 컴포넌트의 도입은 프로젝트에 다음과 같은 긍정적인 변화를 가져왔습니다.
+
+1.  **코드 재사용성 및 유지보수성 향상**: 반복되던 가로 스크롤 및 드래그 관련 로직이 하나의 컴포넌트에 중앙 집중화되어, 코드 중복이 제거되고 유지보수가 훨씬 용이해졌습니다. 새로운 리스트가 추가되어도 `<ScrollContainer>`로 감싸기만 하면 되니 개발 효율성도 크게 높아졌습니다.
+2.  **직관적인 PC 환경 인터랙션 제공**: 마우스 드래그를 통해 콘텐츠를 스크롤하는 기능은 PC 사용자에게 모바일 스와이프와 유사한 직관적이고 부드러운 사용자 경험을 제공합니다. 이는 콘텐츠 탐색의 재미와 편의성을 더했습니다.
+3.  **안정적인 동작**: 드래그와 클릭 이벤트의 충돌을 방지하는 섬세한 이벤트 핸들링 덕분에 사용자 인터랙션이 더욱 안정적으로 작동합니다.
+
+## 배운 점 및 다음 단계
+
+이번 `ScrollContainer` 개발은 단순한 기능 구현을 넘어, 재사용 가능한 컴포넌트를 설계하고 개발하는 과정에서 많은 것을 배울 수 있는 기회였습니다. 특히, 사용자 인터랙션을 고려한 이벤트 핸들링의 중요성과 DOM 조작을 통한 정밀한 레이아웃 제어의 필요성을 다시 한번 깨달았습니다.
+
+다음 단계로 고려하고 있는 개선 사항들입니다:
+
+1. **모바일 터치 지원**: 현재 PC 마우스 이벤트에 초점을 맞춘 드래그 기능을 모바일 터치 이벤트로 확장하여, 모든 디바이스에서 일관된 스와이프 경험을 제공할 예정입니다.
+
+2. **성능 최적화**: `requestAnimationFrame`을 활용하여 스크롤 애니메이션을 브라우저의 리페인트 주기에 맞춰 최적화하여, 더 부드럽고 효율적인 스크롤 경험을 제공할 예정입니다.
+
+3. **접근성 강화**: 키보드 탐색이나 스크린 리더 사용자를 위한 접근성(Accessibility)을 개선하여, 모든 사용자가 편리하게 콘텐츠를 탐색할 수 있도록 하겠습니다.
+
+## 참고 자료
+
+- [Vue.js 공식 문서 - 컴포넌트 기본](https://vuejs.org/guide/essentials/component-basics.html)
+- [Vue.js 공식 문서 - Composition API 소개](https://vuejs.org/guide/extras/composition-api-faq.html)
+- [MDN Web Docs - 이벤트 소개](https://developer.mozilla.org/ko/docs/Web/API/Document_Object_Model/Events)
+- [CSS-Tricks - Custom Scrollbars in Webkit](https://css-tricks.com/custom-scrollbars-in-webkit/)

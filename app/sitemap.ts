@@ -3,28 +3,42 @@ import { MetadataRoute } from "next";
 
 export const dynamic = "force-static";
 
-// Define your base URL here.
-const BASE_URL = "https://mochachoco.github.io/my-site";
+const SITE_URL = "https://mochachoco.github.io/my-site";
+
+const normalizeBasePath = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "/") return "";
+  return `/${trimmed.replace(/^\/|\/$/g, "")}`;
+};
+
+const siteUrl = new URL(SITE_URL);
+const siteBasePath = normalizeBasePath(siteUrl.pathname);
+const siteOrigin = siteUrl.origin;
+
+const buildUrl = (pathname: string) => {
+  const normalizedPath = `${siteBasePath}${pathname}`.replace(/\/{2,}/g, "/");
+  return new URL(normalizedPath, siteOrigin).toString();
+};
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const posts = await getAllPosts();
 
   const postsUrls = posts.map((post) => ({
-    url: `${BASE_URL}/posts/${post.slug}`,
+    url: buildUrl(`/posts/${post.slug}`),
     lastModified: new Date(post.frontmatter.date),
   }));
 
   return [
     {
-      url: BASE_URL,
+      url: buildUrl("/"),
       lastModified: new Date(),
     },
     {
-      url: `${BASE_URL}/posts`,
+      url: buildUrl("/posts"),
       lastModified: new Date(),
     },
     {
-      url: `${BASE_URL}/tags`,
+      url: buildUrl("/tags"),
       lastModified: new Date(),
     },
     ...postsUrls,

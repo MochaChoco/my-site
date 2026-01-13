@@ -13,13 +13,22 @@ export async function generateStaticParams() {
   }));
 }
 
-const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://example.com";
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+const SITE_URL = "https://mochachoco.github.io/my-site";
+const assetBasePath = "/my-site";
+
+const normalizeBasePath = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "/") return "";
+  return `/${trimmed.replace(/^\/|\/$/g, "")}`;
+};
+
+const siteUrl = new URL(SITE_URL);
+const siteBasePath = normalizeBasePath(siteUrl.pathname);
+const siteOrigin = siteUrl.origin;
 
 const buildUrl = (pathname: string) => {
-  const normalizedPath = `${basePath}${pathname}`.replace(/\/{2,}/g, "/");
-  return new URL(normalizedPath, SITE_URL).toString();
+  const normalizedPath = `${siteBasePath}${pathname}`.replace(/\/{2,}/g, "/");
+  return new URL(normalizedPath, siteOrigin).toString();
 };
 
 const toAbsoluteUrl = (pathOrUrl: string) => {
@@ -48,7 +57,7 @@ export async function generateMetadata({
     ? toAbsoluteUrl(post.frontmatter.coverImage)
     : undefined;
   return {
-    metadataBase: new URL(SITE_URL),
+    metadataBase: new URL(buildUrl("/")),
     title,
     description,
     keywords: tags,
@@ -95,11 +104,13 @@ const components = {
   ),
   // Override img to handle basePath for static exports
   img: ({ src, alt, ...props }: any) => {
-    const imageSrc = src?.startsWith('/') ? `${basePath}${src}` : src;
+    const imageSrc = src?.startsWith("/")
+      ? `${assetBasePath}${src}`
+      : src;
     return (
       <img
         src={imageSrc}
-        alt={alt || ''}
+        alt={alt || ""}
         {...props}
       />
     );

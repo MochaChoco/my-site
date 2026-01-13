@@ -3,7 +3,7 @@ import Image from "next/image";
 import { PostMeta } from "@/lib/posts";
 
 export function PostCard({ post }: { post: PostMeta }) {
-  const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+  const basePath = "/my-site";
   const defaultCover = `${basePath}/images/default-blog-cover.png`;
   const coverImage = post.frontmatter.coverImage
     ? `${basePath}${post.frontmatter.coverImage}`

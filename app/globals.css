@@ -78,6 +78,21 @@ body {
   border-radius: 0.5rem;
 }
 
+/* 포스팅 내 테이블 기본 스타일 */
+.prose table {
+  width: 100%;
+  margin: 1.5rem 0;
+  border-collapse: collapse;
+  border: 1px solid hsl(var(--border));
+}
+
+.prose th,
+.prose td {
+  border: 1px solid hsl(var(--border));
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
 /* 코드 블록 스타일 (rehype-pretty-code) */
 .prose pre {
   display: flex;

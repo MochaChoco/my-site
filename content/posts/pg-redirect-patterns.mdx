@@ -1,0 +1,567 @@
+---
+title: 외부 PG사 연동 시 리다이렉트 패턴 비교 - SDK vs Form POST vs GET
+description: "결제 시스템에서 다양한 외부 결제 서비스를 연동하면서 경험한 리다이렉트 패턴들의 차이점과 구현 방법을 공유합니다."
+date: "2025-01-17"
+tags: ["payment", "pg", "next.js", "react"]
+slug: "pg-redirect-patterns"
+coverImage: "/images/posts/pg-redirect-patterns/cover.png"
+---
+
+![커버 이미지](/images/posts/pg-redirect-patterns/cover.png)
+
+안녕하세요. 오늘은 결제 시스템 프론트엔드 개발 과정에서 다양한 외부 PG(Payment Gateway)사를 연동하면서 경험한 리다이렉트 패턴들에 대해 이야기해보려고 합니다. 여러 PG사와 결제 수단을 통합하면서 각 PG사마다 요구하는 연동 방식이 다르다는 것을 알게 되었고, 이를 하나의 시스템에서 어떻게 일관성 있게 처리했는지 공유하고자 합니다.
+
+## 문제의식과 배경
+
+온라인 결제 서비스를 개발할 때, 다양한 결제 수단을 지원하는 것은 사용자 경험 측면에서 매우 중요합니다. 하지만 각 PG사마다 연동 방식이 다르기 때문에, 프론트엔드에서 이를 통합 관리하는 것은 쉬운 일이 아닙니다.
+
+저희 팀은 다음과 같은 결제 수단들을 지원해야 했습니다:
+
+<table>
+  <thead>
+    <tr>
+      <th>결제 수단</th>
+      <th>PG사</th>
+      <th>연동 방식</th>
+      <th>특징</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>간편결제 α</td>
+      <td>PG사 A</td>
+      <td>GET 리다이렉트</td>
+      <td>예약ID 기반</td>
+    </tr>
+    <tr>
+      <td>간편결제 β</td>
+      <td>PG사 B</td>
+      <td>Form POST</td>
+      <td>트랜잭션ID 기반</td>
+    </tr>
+    <tr>
+      <td>신용카드</td>
+      <td>PG사 B</td>
+      <td>Form POST</td>
+      <td>암호화 파라미터</td>
+    </tr>
+    <tr>
+      <td>휴대폰 결제</td>
+      <td>PG사 B</td>
+      <td>Form POST</td>
+      <td>JSON 파라미터</td>
+    </tr>
+    <tr>
+      <td>상품권</td>
+      <td>PG사 B</td>
+      <td>Form POST</td>
+      <td>암호화 파라미터</td>
+    </tr>
+  </tbody>
+</table>
+
+핵심적인 고민은 다음과 같았습니다:
+
+1. **연동 방식의 다양성**: GET 리다이렉트, Form POST, SDK 호출 등 각기 다른 방식을 어떻게 통합할까?
+2. **콜백 처리의 일관성**: PG사마다 다른 형식으로 전달되는 결제 결과를 어떻게 통일된 방식으로 처리할까?
+3. **보안과 사용자 경험**: 결제 정보를 안전하게 전달하면서도 사용자에게 끊김 없는 결제 경험을 제공할 수 있을까?
+
+이러한 문제의식을 바탕으로, 저희는 각 PG사의 연동 방식을 분석하고 Next.js App Router 구조에서 효율적으로 통합하는 방법을 설계했습니다.
+
+## 핵심 개념 파고들기: 세 가지 리다이렉트 패턴
+
+외부 PG사와 연동하는 방식은 크게 세 가지 패턴으로 나눌 수 있습니다. 각 패턴의 특징과 장단점을 살펴보겠습니다.
+
+### 1. GET 리다이렉트 방식 (PG사 A - 간편결제 α)
+
+GET 리다이렉트 방식은 URL에 결제 식별자를 포함하여 PG 결제창으로 이동하는 방식입니다. PG사 A는 서버에서 미리 결제 정보를 등록하고 발급받은 `reserveId`를 URL 경로에 포함하여 결제창을 호출합니다.
+
+```
+[클라이언트] → [백엔드 API] → [PG사 A Reserve API]
+                                    ↓
+                              reserveId 발급
+                                    ↓
+[클라이언트] ←─────────────────────────┘
+      ↓
+window.location.href = "https://pg-a.example.com/payments/{reserveId}"
+      ↓
+[PG사 A 결제창] → 결제 진행
+      ↓
+GET 콜백: /payment/callback?resultCode=Success&orderId=xxx
+```
+
+**장점:**
+
+- URL만으로 결제창 호출이 가능하여 구현이 단순함
+- 브라우저 히스토리 관리가 용이함
+- 모바일 앱 스킴 연동이 쉬움
+
+**단점:**
+
+- URL 길이 제한으로 복잡한 파라미터 전달에 한계
+- URL에 민감 정보 노출 위험 (따라서 reserveId 방식 사용)
+
+### 2. Form POST 방식 (PG사 B - 신용카드, 간편결제 β)
+
+Form POST 방식은 HTML form을 생성하여 PG 서버로 파라미터를 전송하는 방식입니다. PG사 B의 신용카드와 간편결제 β는 이 방식을 사용합니다.
+
+```
+[클라이언트] → [백엔드 API] → [PG사 B 결제 준비 API]
+                                    ↓
+                        암호화 파라미터/트랜잭션ID 발급
+                                    ↓
+[클라이언트] ←─────────────────────────┘
+      ↓
+<form action="PG_URL" method="POST">
+  <input name="encryptedParams" value="암호화된_파라미터" />
+</form>
+form.submit()
+      ↓
+[PG사 B 결제창] → 결제 진행
+      ↓
+POST 콜백: /payment/callback (FormData: returnParams)
+```
+
+**장점:**
+
+- 대용량 파라미터 전송 가능
+- 암호화된 데이터 전송으로 보안성 높음
+- 브라우저 호환성 우수
+
+**단점:**
+
+- 별도의 form 페이지가 필요
+- 콜백 처리 시 FormData 파싱 필요
+
+### 3. JSON 파라미터 Form POST 방식 (PG사 B - 휴대폰, 상품권)
+
+휴대폰 결제와 상품권은 Form POST를 사용하지만, 파라미터 형식이 다릅니다. 단일 암호화 문자열 대신 JSON 객체의 각 필드를 개별 input으로 전송합니다.
+
+```
+[클라이언트] → [백엔드 API] → [PG사 B 결제 준비 API]
+                                    ↓
+                        JSON 파라미터 객체 생성
+                                    ↓
+[클라이언트] ←─────────────────────────┘
+      ↓
+<form action="PG_URL" method="POST">
+  <input name="param1" value="xxx" />
+  <input name="param2" value="xxx" />
+  <input name="param3" value="xxx" />
+  ...
+</form>
+form.submit()
+      ↓
+[PG사 B 결제창] → 결제 진행
+      ↓
+POST 콜백: /payment/callback (FormData: 개별 필드들)
+```
+
+**장점:**
+
+- 파라미터 구조가 명확하여 디버깅 용이
+- 특정 필드만 선택적으로 수정 가능
+
+**단점:**
+
+- 파라미터 개수가 많아질 수 있음
+- 콜백 시 여러 필드를 조합해야 함
+
+## 구현 포인트: 코드와 함께 자세히 보기
+
+### 1. 결제 수단별 분기 처리
+
+결제 수단 선택과 실행을 담당하는 컴포넌트에서는 선택된 결제 수단에 따라 적절한 리다이렉트 함수를 호출합니다.
+
+```tsx
+async function initiatePayment() {
+  setLoading(true);
+
+  try {
+    // 1. 결제 준비 API 호출 - 모든 결제 수단에 공통
+    const { paymentData } = await request("/api/payments/prepare", {
+      method: "POST",
+      body: {
+        orderId,
+        userPlatform,
+        payMethod: selectedMethod,
+      },
+    });
+
+    // 2. 결제 수단별 분기 처리
+    switch (selectedMethod) {
+      case "EASY_PAY_A":
+        // GET 리다이렉트 방식
+        openEasyPayA(paymentData);
+        break;
+
+      case "CARD":
+      case "EASY_PAY_B":
+        // Form POST 방식 (단일 파라미터)
+        submitPaymentForm(
+          paymentData.pgRedirectUrl,
+          paymentData.encryptedParams
+        );
+        break;
+
+      case "PHONE":
+      case "GIFTCARD":
+        // Form POST 방식 (JSON 파라미터)
+        submitPaymentForm(paymentData.pgRedirectUrl, paymentData.params);
+        break;
+    }
+  } catch {
+    setLoading(false);
+  }
+}
+```
+
+이 코드에서 주목할 점은 모든 결제 수단이 동일한 API(`/api/payments/prepare`)를 호출한다는 것입니다. 백엔드에서 결제 수단에 따라 적절한 PG 파라미터를 생성하여 반환하고, 프론트엔드는 이를 받아 각 방식에 맞게 처리합니다.
+
+### 2. GET 리다이렉트 구현 (PG사 A)
+
+PG사 A는 `reserveId` 기반의 GET 리다이렉트를 사용합니다. 이 방식의 핵심은 결제 정보가 URL에 직접 노출되지 않고, 서버에서 미리 등록한 결제 정보를 식별하는 ID만 전달된다는 점입니다.
+
+```tsx
+function openEasyPayA(paymentData: PaymentDataType) {
+  const { reserveId } = paymentData;
+
+  // 환경에 따른 도메인 분기
+  const isDev = process.env.NEXT_PUBLIC_IS_DEV === "true";
+  const pgDomain = isDev
+    ? "https://test-pg-a.example.com"
+    : "https://pg-a.example.com";
+
+  // reserveId를 URL 경로에 포함하여 결제창 호출
+  let paymentUrl = `${pgDomain}/payments/${reserveId}`;
+
+  // 앱 내 웹뷰인 경우 앱 스킴 파라미터 추가
+  if (isInApp) {
+    paymentUrl += "?appscheme=true";
+  }
+
+  // 페이지 이동
+  window.location.href = paymentUrl;
+}
+```
+
+`reserveId` 방식의 장점은 **위변조 방지**입니다. 결제 금액, 상품 정보 등이 URL에 노출되지 않고, 서버에서 미리 검증된 정보로만 결제가 진행됩니다.
+
+### 3. Form POST 구현
+
+PG사 B 결제는 별도의 페이지(`/payment/redirect`)에서 form을 자동 제출합니다. 이 페이지는 URL 파라미터로 전달받은 정보를 hidden form으로 구성하여 PG 서버로 전송합니다.
+
+```tsx
+// /payment/redirect/PaymentSubmitForm.tsx
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+
+export default function PaymentSubmitForm() {
+  const searchParams = useSearchParams();
+  const form = useRef<HTMLFormElement>(null);
+
+  // URL에서 파라미터 추출
+  const pgUrl = searchParams.get("pgUrl");
+  const payMethod = searchParams.get("payMethod");
+  const params = searchParams.get("params");
+  const txId = searchParams.get("txId");
+
+  const [paramName, setParamName] = useState<string>("");
+  const [paramValue, setParamValue] = useState<string>("");
+  const [jsonParams, setJsonParams] = useState<Record<string, string>>({});
+
+  // 결제 수단별 파라미터 처리
+  function validateAndSetParams() {
+    switch (payMethod) {
+      case "CARD":
+        // 신용카드: 암호화 파라미터
+        if (!pgUrl || !params) return false;
+        setParamName("encryptedParams");
+        setParamValue(params);
+        break;
+
+      case "EASY_PAY_B":
+        // 간편결제 β: 트랜잭션ID
+        if (!pgUrl || !txId) return false;
+        setParamName("transactionId");
+        setParamValue(txId);
+        break;
+
+      case "PHONE":
+        // 휴대폰 결제: JSON 객체를 개별 input으로 변환
+        if (!pgUrl || !params) return false;
+        try {
+          const paramsObj = JSON.parse(params);
+          paramsObj.charset = "UTF-8";
+          setJsonParams(paramsObj);
+        } catch {
+          return false;
+        }
+        break;
+
+      case "GIFTCARD":
+        // 상품권: 암호화 필드 URL 인코딩 필요
+        if (!pgUrl || !params) return false;
+        try {
+          const paramsObj = JSON.parse(params);
+          paramsObj.encrypted = encodeURIComponent(paramsObj.encrypted);
+          setJsonParams(paramsObj);
+        } catch {
+          return false;
+        }
+        break;
+
+      default:
+        return false;
+    }
+    return true;
+  }
+
+  useEffect(() => {
+    if (validateAndSetParams() && form.current) {
+      // form 자동 제출
+      form.current.submit();
+    }
+  }, [pgUrl, payMethod, params, txId]);
+
+  return (
+    <form action={pgUrl!} ref={form} method="POST" style={{ display: "none" }}>
+      {payMethod === "PHONE" || payMethod === "GIFTCARD" ? (
+        // JSON 파라미터: 각 필드를 개별 input으로 생성
+        Object.entries(jsonParams).map(([key, val]) => (
+          <input key={key} type="hidden" name={key} value={val} />
+        ))
+      ) : (
+        // 단일 파라미터
+        <input type="hidden" name={paramName} value={paramValue} />
+      )}
+    </form>
+  );
+}
+```
+
+이 컴포넌트의 핵심은 **결제 수단별로 다른 파라미터 형식을 통일된 방식으로 처리**하는 것입니다. `useEffect`에서 컴포넌트 마운트 시 자동으로 form을 제출하여 사용자에게 빈 페이지가 보이는 시간을 최소화합니다.
+
+### 4. 콜백 처리의 통합 (Route Handler)
+
+PG 결제 완료 후 각 PG사는 서로 다른 방식으로 결과를 전달합니다. 이를 하나의 라우트 핸들러에서 통합 처리합니다.
+
+```tsx
+// /payment/callback/route.ts
+import { NextRequest, redirect, RedirectType } from "next/server";
+
+// PG사 A: GET 콜백
+export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams;
+  const orderId = searchParams.get("orderId");
+  const resultCode = searchParams.get("resultCode");
+  const transactionId = searchParams.get("transactionId");
+  const reserveId = searchParams.get("reserveId");
+
+  // 결제 실패 처리
+  if (resultCode !== "Success") {
+    return redirect(
+      `/payment/fail?orderId=${orderId}&resultCode=UserCancel`,
+      RedirectType.push
+    );
+  }
+
+  // 결과 파라미터 구성
+  const returnParams = JSON.stringify({
+    resultCode,
+    transactionId,
+    reserveId,
+  });
+
+  // 통합 완료 페이지로 리다이렉트
+  return redirect(
+    `/payment/complete?payMethod=EASY_PAY_A&orderId=${orderId}&returnParams=${encodeURIComponent(
+      returnParams
+    )}`,
+    RedirectType.push
+  );
+}
+
+// PG사 B: POST 콜백
+export async function POST(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams;
+  const formData = await request.formData();
+  const orderId = searchParams.get("orderId");
+  const payMethod = searchParams.get("payMethod");
+
+  let methodType = "CARD";
+  let returnParams: string | null = null;
+
+  // 결제 수단별 파라미터 추출
+  switch (payMethod) {
+    case "giftcard":
+      methodType = "GIFTCARD";
+      returnParams = formData.get("encryptedResult")?.toString() ?? null;
+      break;
+
+    case "phone":
+      methodType = "PHONE";
+      // 여러 필드를 JSON으로 조합
+      returnParams = JSON.stringify({
+        serverInfo: formData.get("serverInfo")?.toString() ?? "",
+        merchantId: formData.get("merchantId")?.toString() ?? "",
+        productName: formData.get("productName")?.toString() ?? "",
+        amount: formData.get("amount")?.toString() ?? "",
+        callbackUrl: formData.get("callbackUrl")?.toString() ?? "",
+      });
+      break;
+
+    case "easy-pay-c":
+      methodType = "EASY_PAY_B";
+      returnParams = formData.get("returnParams")?.toString() ?? null;
+      break;
+
+    default: // card
+      methodType = "CARD";
+      returnParams = formData.get("returnParams")?.toString() ?? null;
+  }
+
+  // 통합 완료 페이지로 리다이렉트
+  return redirect(
+    `/payment/complete?payMethod=${methodType}&orderId=${orderId}&returnParams=${
+      returnParams && encodeURIComponent(returnParams)
+    }`,
+    RedirectType.push
+  );
+}
+```
+
+이 라우트 핸들러의 핵심은 **다양한 형식의 콜백을 하나의 통일된 형식으로 변환**하는 것입니다. GET과 POST 각각의 핸들러가 결제 수단별 파라미터를 추출하고, 동일한 구조의 URL로 `/payment/complete` 페이지에 전달합니다.
+
+### 5. 결제 준비 API (Backend Proxy)
+
+프론트엔드 API 라우트는 백엔드 API를 호출하고, 특정 PG의 경우 환경변수에서 자격증명을 주입합니다.
+
+```tsx
+// /api/payments/prepare/route.ts
+export async function POST(request: Request) {
+  const body = await request.json();
+  const { orderId, payMethod, userPlatform } = body;
+
+  // 백엔드 API 호출
+  const result = await fetchBackendAPI(`/api/v1/payments/${orderId}/prepare`, {
+    method: "POST",
+    body: JSON.stringify({
+      payMethod,
+      userPlatform,
+    }),
+  });
+
+  // PG사 A: 클라이언트 자격증명 주입
+  if (payMethod === "EASY_PAY_A") {
+    result.paymentData.clientId = process.env.PG_A_CLIENT_ID;
+    result.paymentData.chainId = process.env.PG_A_CHAIN_ID;
+  }
+
+  return Response.json(result);
+}
+```
+
+환경변수를 서버 사이드에서 주입하는 이유는 **보안**입니다. PG 클라이언트 ID와 같은 민감 정보가 클라이언트 코드에 노출되지 않도록 합니다.
+
+## 적용 결과와 효과
+
+이번 PG 연동 패턴 통합 작업을 통해 다음과 같은 결과를 얻을 수 있었습니다.
+
+1. **통일된 결제 흐름**: 다양한 PG사의 연동 방식에도 불구하고, 프론트엔드에서는 일관된 패턴으로 처리할 수 있게 되었습니다.
+
+```
+[결제 수단 선택]
+       ↓
+[/api/payments/prepare 호출] ← 모든 결제 수단 공통
+       ↓
+[결제 수단별 리다이렉트]
+  - PG사 A: window.location.href
+  - PG사 B: /payment/redirect → form.submit()
+       ↓
+[/payment/callback 콜백] ← GET/POST 통합 처리
+       ↓
+[/payment/complete] ← 통일된 결과 페이지
+```
+
+2. **유지보수성 향상**: 새로운 결제 수단 추가 시, 기존 패턴에 맞춰 분기 조건만 추가하면 됩니다.
+
+3. **에러 처리의 일관성**: 모든 결제 실패가 `/payment/fail` 페이지를 통해 처리되어, 사용자에게 일관된 에러 메시지를 제공할 수 있습니다.
+
+4. **보안 강화**:
+   - PG사 A: reserveId 방식으로 결제 정보 위변조 방지
+   - PG사 B: 암호화된 파라미터 사용
+   - 환경변수 서버 사이드 주입으로 민감 정보 보호
+
+## 패턴별 비교 정리
+
+<table>
+  <thead>
+    <tr>
+      <th>항목</th>
+      <th>GET 리다이렉트</th>
+      <th>Form POST (단일)</th>
+      <th>Form POST (JSON)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>대표 PG</td>
+      <td>PG사 A (간편결제)</td>
+      <td>PG사 B (신용카드, 간편결제)</td>
+      <td>PG사 B (휴대폰, 상품권)</td>
+    </tr>
+    <tr>
+      <td>구현 복잡도</td>
+      <td>낮음</td>
+      <td>중간</td>
+      <td>중간</td>
+    </tr>
+    <tr>
+      <td>파라미터 크기</td>
+      <td>제한적</td>
+      <td>대용량 가능</td>
+      <td>대용량 가능</td>
+    </tr>
+    <tr>
+      <td>보안성</td>
+      <td>reserveId로 보완</td>
+      <td>암호화 파라미터</td>
+      <td>암호화 파라미터</td>
+    </tr>
+    <tr>
+      <td>콜백 방식</td>
+      <td>GET</td>
+      <td>POST (FormData)</td>
+      <td>POST (FormData)</td>
+    </tr>
+    <tr>
+      <td>디버깅 용이성</td>
+      <td>URL 확인 가능</td>
+      <td>파라미터 암호화됨</td>
+      <td>개별 필드 확인 가능</td>
+    </tr>
+    <tr>
+      <td>앱 연동</td>
+      <td>스킴 추가 용이</td>
+      <td>웹뷰 처리 필요</td>
+      <td>웹뷰 처리 필요</td>
+    </tr>
+  </tbody>
+</table>
+
+## 배운 점과 다음 단계
+
+이번 프로젝트를 진행하면서 **각 PG사의 연동 방식을 이해하고 추상화하는 것**의 중요성을 깨달았습니다. 처음에는 각 결제 수단마다 별도의 로직을 작성했지만, 패턴을 분석하고 공통점을 찾아내면서 코드의 중복을 크게 줄일 수 있었습니다.
+
+특히 Next.js App Router의 라우트 핸들러를 활용하여 GET과 POST 콜백을 하나의 파일에서 처리하는 방식은 코드 관리 측면에서 매우 효율적이었습니다.
+
+아직 개선할 점도 남아있습니다:
+
+1. **타임아웃 처리**: PG 결제창에서 사용자가 장시간 대기하는 경우의 처리
+2. **결제 상태 폴링**: 콜백이 누락되는 엣지 케이스 대응
+3. **A/B 테스팅**: 결제 수단 배치 순서에 따른 전환율 분석
+
+이러한 경험들을 통해, 사용자에게 더 안정적이고 편리한 결제 경험을 제공할 수 있도록 계속해서 개선해 나가겠습니다.

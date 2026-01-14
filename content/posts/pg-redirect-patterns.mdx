@@ -74,20 +74,20 @@ coverImage: "/images/posts/pg-redirect-patterns/cover.png"
 
 ### 1. GET 리다이렉트 방식 (PG사 A - 간편결제 α)
 
-GET 리다이렉트 방식은 URL에 결제 식별자를 포함하여 PG 결제창으로 이동하는 방식입니다. PG사 A는 서버에서 미리 결제 정보를 등록하고 발급받은 `reserveId`를 URL 경로에 포함하여 결제창을 호출합니다.
+GET 리다이렉트 방식은 URL에 결제 식별자를 포함하여 PG 결제창으로 이동하는 방식입니다. PG사 A는 서버에서 미리 결제 정보를 등록하고 발급받은 `reservationKey`를 URL 경로에 포함하여 결제창을 호출합니다.
 
 ```
 [클라이언트] → [백엔드 API] → [PG사 A Reserve API]
                                     ↓
-                              reserveId 발급
+                              reservationKey 발급
                                     ↓
 [클라이언트] ←─────────────────────────┘
       ↓
-window.location.href = "https://pg-a.example.com/payments/{reserveId}"
+window.location.href = "https://pg-a.example.com/payments/{reservationKey}"
       ↓
 [PG사 A 결제창] → 결제 진행
       ↓
-GET 콜백: /payment/callback?resultCode=Success&orderId=xxx
+GET 콜백: /payment/callback?resultStatus=Success&orderKey=xxx
 ```
 
 **장점:**
@@ -99,7 +99,7 @@ GET 콜백: /payment/callback?resultCode=Success&orderId=xxx
 **단점:**
 
 - URL 길이 제한으로 복잡한 파라미터 전달에 한계
-- URL에 민감 정보 노출 위험 (따라서 reserveId 방식 사용)
+- URL에 민감 정보 노출 위험 (따라서 reservationKey 방식 사용)
 
 ### 2. Form POST 방식 (PG사 B - 신용카드, 간편결제 β)
 
@@ -182,7 +182,7 @@ async function initiatePayment() {
     const { paymentData } = await request("/api/payments/prepare", {
       method: "POST",
       body: {
-        orderId,
+        orderKey,
         userPlatform,
         payMethod: selectedMethod,
       },
@@ -220,11 +220,11 @@ async function initiatePayment() {
 
 ### 2. GET 리다이렉트 구현 (PG사 A)
 
-PG사 A는 `reserveId` 기반의 GET 리다이렉트를 사용합니다. 이 방식의 핵심은 결제 정보가 URL에 직접 노출되지 않고, 서버에서 미리 등록한 결제 정보를 식별하는 ID만 전달된다는 점입니다.
+PG사 A는 `reservationKey` 기반의 GET 리다이렉트를 사용합니다. 이 방식의 핵심은 결제 정보가 URL에 직접 노출되지 않고, 서버에서 미리 등록한 결제 정보를 식별하는 ID만 전달된다는 점입니다.
 
 ```tsx
 function openEasyPayA(paymentData: PaymentDataType) {
-  const { reserveId } = paymentData;
+  const { reservationKey } = paymentData;
 
   // 환경에 따른 도메인 분기
   const isDev = process.env.NEXT_PUBLIC_IS_DEV === "true";
@@ -232,8 +232,8 @@ function openEasyPayA(paymentData: PaymentDataType) {
     ? "https://test-pg-a.example.com"
     : "https://pg-a.example.com";
 
-  // reserveId를 URL 경로에 포함하여 결제창 호출
-  let paymentUrl = `${pgDomain}/payments/${reserveId}`;
+  // reservationKey를 URL 경로에 포함하여 결제창 호출
+  let paymentUrl = `${pgDomain}/payments/${reservationKey}`;
 
   // 앱 내 웹뷰인 경우 앱 스킴 파라미터 추가
   if (isInApp) {
@@ -245,7 +245,7 @@ function openEasyPayA(paymentData: PaymentDataType) {
 }
 ```
 
-`reserveId` 방식의 장점은 **위변조 방지**입니다. 결제 금액, 상품 정보 등이 URL에 노출되지 않고, 서버에서 미리 검증된 정보로만 결제가 진행됩니다.
+`reservationKey` 방식의 장점은 **위변조 방지**입니다. 결제 금액, 상품 정보 등이 URL에 노출되지 않고, 서버에서 미리 검증된 정보로만 결제가 진행됩니다.
 
 ### 3. Form POST 구현
 
@@ -266,7 +266,7 @@ export default function PaymentSubmitForm() {
   const pgUrl = searchParams.get("pgUrl");
   const payMethod = searchParams.get("payMethod");
   const params = searchParams.get("params");
-  const txId = searchParams.get("txId");
+  const transactionKey = searchParams.get("transactionKey");
 
   const [paramName, setParamName] = useState<string>("");
   const [paramValue, setParamValue] = useState<string>("");
@@ -284,9 +284,9 @@ export default function PaymentSubmitForm() {
 
       case "EASY_PAY_B":
         // 간편결제 β: 트랜잭션ID
-        if (!pgUrl || !txId) return false;
-        setParamName("transactionId");
-        setParamValue(txId);
+        if (!pgUrl || !transactionKey) return false;
+        setParamName("transactionKey");
+        setParamValue(transactionKey);
         break;
 
       case "PHONE":
@@ -324,7 +324,7 @@ export default function PaymentSubmitForm() {
       // form 자동 제출
       form.current.submit();
     }
-  }, [pgUrl, payMethod, params, txId]);
+  }, [pgUrl, payMethod, params, transactionKey]);
 
   return (
     <form action={pgUrl!} ref={form} method="POST" style={{ display: "none" }}>
@@ -355,29 +355,29 @@ import { NextRequest, redirect, RedirectType } from "next/server";
 // PG사 A: GET 콜백
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
-  const orderId = searchParams.get("orderId");
-  const resultCode = searchParams.get("resultCode");
-  const transactionId = searchParams.get("transactionId");
-  const reserveId = searchParams.get("reserveId");
+  const orderKey = searchParams.get("orderKey");
+  const resultStatus = searchParams.get("resultStatus");
+  const transactionKey = searchParams.get("transactionKey");
+  const reservationKey = searchParams.get("reservationKey");
 
   // 결제 실패 처리
-  if (resultCode !== "Success") {
+  if (resultStatus !== "Success") {
     return redirect(
-      `/payment/fail?orderId=${orderId}&resultCode=UserCancel`,
+      `/payment/fail?orderKey=${orderKey}&resultStatus=UserCancel`,
       RedirectType.push
     );
   }
 
   // 결과 파라미터 구성
   const returnParams = JSON.stringify({
-    resultCode,
-    transactionId,
-    reserveId,
+    resultStatus,
+    transactionKey,
+    reservationKey,
   });
 
   // 통합 완료 페이지로 리다이렉트
   return redirect(
-    `/payment/complete?payMethod=EASY_PAY_A&orderId=${orderId}&returnParams=${encodeURIComponent(
+    `/payment/complete?payMethod=EASY_PAY_A&orderKey=${orderKey}&returnParams=${encodeURIComponent(
       returnParams
     )}`,
     RedirectType.push
@@ -388,7 +388,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const formData = await request.formData();
-  const orderId = searchParams.get("orderId");
+  const orderKey = searchParams.get("orderKey");
   const payMethod = searchParams.get("payMethod");
 
   let methodType = "CARD";
@@ -425,7 +425,7 @@ export async function POST(request: NextRequest) {
 
   // 통합 완료 페이지로 리다이렉트
   return redirect(
-    `/payment/complete?payMethod=${methodType}&orderId=${orderId}&returnParams=${
+    `/payment/complete?payMethod=${methodType}&orderKey=${orderKey}&returnParams=${
       returnParams && encodeURIComponent(returnParams)
     }`,
     RedirectType.push
@@ -443,10 +443,10 @@ export async function POST(request: NextRequest) {
 // /api/payments/prepare/route.ts
 export async function POST(request: Request) {
   const body = await request.json();
-  const { orderId, payMethod, userPlatform } = body;
+  const { orderKey, payMethod, userPlatform } = body;
 
   // 백엔드 API 호출
-  const result = await fetchBackendAPI(`/api/v1/payments/${orderId}/prepare`, {
+  const result = await fetchBackendAPI(`/api/v1/payments/${orderKey}/prepare`, {
     method: "POST",
     body: JSON.stringify({
       payMethod,
@@ -491,7 +491,7 @@ export async function POST(request: Request) {
 3. **에러 처리의 일관성**: 모든 결제 실패가 `/payment/fail` 페이지를 통해 처리되어, 사용자에게 일관된 에러 메시지를 제공할 수 있습니다.
 
 4. **보안 강화**:
-   - PG사 A: reserveId 방식으로 결제 정보 위변조 방지
+   - PG사 A: reservationKey 방식으로 결제 정보 위변조 방지
    - PG사 B: 암호화된 파라미터 사용
    - 환경변수 서버 사이드 주입으로 민감 정보 보호
 
@@ -527,7 +527,7 @@ export async function POST(request: Request) {
     </tr>
     <tr>
       <td>보안성</td>
-      <td>reserveId로 보완</td>
+      <td>reservationKey로 보완</td>
       <td>암호화 파라미터</td>
       <td>암호화 파라미터</td>
     </tr>

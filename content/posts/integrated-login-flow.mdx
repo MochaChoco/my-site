@@ -1,0 +1,1071 @@
+---
+title: "통합 로그인 시스템 구축기: 소셜 로그인과 이메일 로그인을 하나로"
+description: "네이버, 구글 소셜 로그인과 이메일 계정 시스템을 통합하여 일관된 사용자 경험을 제공하고 신규 회원 가입 플로우를 단일화한 과정을 소개합니다."
+date: "2026-01-07"
+tags: ["vue", "oauth", "authentication"]
+slug: "integrated-login-flow"
+coverImage: "/images/posts/integrated-login-flow/cover.png"
+--- 
+
+<img
+  src="/my-site/images/posts/integrated-login-flow/cover.png"
+  style={{ maxWidth: "320px" }}
+  alt="커버 이미지"
+/>
+
+## 들어가며
+
+현대적인 웹 서비스에서 사용자의 첫인상은 로그인과 회원가입 과정에서 결정되는 경우가 많습니다. 다양한 사용자를 포용하기 위해 네이버, 구글과 같은 소셜 로그인과 전통적인 이메일 로그인을 모두 제공하는 것은 이제 선택이 아닌 필수가 되었습니다.
+
+저희 프론트엔드 팀은 이 세 가지 로그인/회원가입 경로를 어떻게 하나의 일관된 사용자 경험(UX)으로 통합했는지, 그 과정에서 마주한 기술적 결정과 구현 방식을 공유하고자 합니다.
+
+
+
+## 1. 통합 플로우의 목표: 분기(Fork)와 병합(Merge)
+
+저희가 구상한 통합 플로우의 핵심은 간단합니다.
+
+1.  **분기 (Fork)**: 사용자에게 로그인 방식을 선택할 명확한 UI를 제공합니다. (네이버 / 구글 / 이메일)
+2.  **각자의 인증 처리**: 각 방식에 맞는 인증 절차를 진행합니다.
+3.  **병합 (Merge)**: 인증 성공 후에는 **어떤 방식으로 로그인했는지와 관계없이** 공통된 후처리 로직을 수행하여 사용자 정보를 갱신하고 최종 목적지로 안내합니다.
+
+이 '병합' 단계가 바로 통합 플로우의 핵심이며, 코드의 중복을 막고 유지보수성을 높이는 열쇠입니다.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      통합 로그인 및 회원가입 전체 플로우                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+1. [프론트엔드] 사용자가 로그인 방식 선택
+   └─> SocialLoginView
+       │
+       ├─ (소셜 로그인: 구글/네이버) → SocialProviderButton 클릭
+       │   └─> 2A. [외부 브라우저] 소셜 OAuth 인증 진행
+       │
+       ├─ (이메일 로그인) → /login 라우팅
+       │   └─> 2B. [프론트엔드] EmailLoginView
+       │
+       └─ (이메일 회원가입) → /signup 라우팅
+           └─> 2C. [프론트엔드] SignupView (3단계)
+
+2A. [외부 브라우저] 소셜 OAuth 인증 진행
+    └─> SocialProviderButton 컴포넌트
+        └─> SocialAuthService.Provider.init() 호출
+            └─> 각 소셜 플랫폼의 OAuth 인증 페이지
+                └─> 사용자 동의
+                    └─> 콜백 URL로 리다이렉트 (access_token 포함)
+                        └─> 3A. [프론트엔드] 소셜 로그인 콜백 처리
+
+2B. [프론트엔드] 이메일 로그인
+    └─> EmailLoginView
+        └─> 이메일/비밀번호 입력 → submitForm()
+            └─> authStore.login(email, password, rememberMe)
+                └─> POST /api/v1/auth/login
+                    └─> 4. [백엔드] 인증 처리 및 세션 생성
+
+2C. [프론트엔드] 이메일 회원가입
+    └─> SignupView (3단계)
+        ├─ Step 1: EmailVerificationStep
+        │   └─> 이메일 인증, 비밀번호, 닉네임, 약관 동의
+        ├─ Step 2: AgeVerificationStep
+        │   └─> 생년월일, 미성년자 본인인증
+        └─ Step 3: CompletionStep
+            └─> signupStore.submitSignup() 또는 submitSocialSignup()
+                └─> POST /api/v1/auth/signup
+                    └─> 4. [백엔드] 회원가입 처리 및 자동 로그인
+
+3A. [프론트엔드] 소셜 로그인 콜백 처리
+   └─> SocialCallbackView (provider별 분기)
+       └─> access_token 추출
+           └─> socialAuth.authenticate(provider, token)
+               └─> authStore.loginWithSocial(provider, token)
+                   └─> POST /api/v1/auth/social/login
+                       ├─ [성공] → 4. 로그인 처리
+                       └─ [실패] → handleSocialAuthFailure()
+                           └─> checkSocialUserExistence() 호출
+                               ├─ [신규] → 회원가입 페이지로 이동 (정보 프리필)
+                               └─ [오류] → 에러 안내 (이메일 중복, 미인증 등)
+
+4. [백엔드] 인증 처리 및 세션 생성
+   ├─ 이메일: POST /api/v1/auth/login
+   ├─ 소셜: POST /api/v1/auth/social/login
+   └─ 회원가입: POST /api/v1/auth/signup 또는 /api/v1/auth/social/signup
+       │
+       └─> 인증 성공 시, 쿠키에 세션 정보 저장
+           └─> 5. [프론트엔드] 공통 후처리
+
+5. [프론트엔드] 공통 후처리 (로그인 성공 후)
+   └─> composables/usePostAuth.js의 execute() 함수 호출
+       │
+       ├─ authStore.setUserData(userData)
+       │   └─> Pinia 스토어 및 sessionStorage에 사용자 정보 저장
+       │
+       ├─ OAuth 요청 확인 (clientId, responseType 존재?)
+       │   ├─ [있음] → hasOAuthConsent() 확인
+       │   │   ├─ true → approveOAuthRequest() 즉시 실행
+       │   │   └─ false → /consent로 이동 (데이터 수집 동의)
+       │   │
+       │   └─ [없음] → 서비스 리다이렉트 확인
+       │       ├─ [있음] → redirectToService()
+       │       │   └─> /api/v1/auth/complete?serviceId=...&callbackUrl=...
+       │       │       └─> 최종 서비스로 리다이렉트
+       │       │
+       │       └─ [없음] → /dashboard (메인 페이지)로 이동
+
+6. [프론트엔드] OAuth 승인 처리 (필요 시)
+    └─> DataConsentView
+        └─> 데이터 수집 동의 완료
+            └─> approveOAuthRequest()
+                └─> POST /api/v1/oauth/approve
+                    └─> redirectUri?code=... 또는 redirectUri#accessToken=...
+```
+
+## 2. 구현 들여다보기
+
+### 단계 1: 사용자의 첫 관문, 로그인 화면
+
+![커버 이미지](/images/posts/integrated-login-flow/main.png)
+
+사용자는 가장 먼저 모든 로그인 옵션이 모여있는 화면을 마주하게 됩니다.
+
+```vue
+// views/SocialLoginView.vue
+
+<template>
+  <div class="social-login-page">
+    <div class="social-login">
+      <div class="social-login-wrapper">
+        <div class="social-login-buttons">
+          <SocialProviderButton provider="naver" />
+          <SocialProviderButton provider="google" />
+        </div>
+        <RouterLink
+          class="go-to-email-link"
+          :to="{ path: '/login', query: { ...route.query } }"
+        >
+          <Text class="go-to-email-text">이메일 계정으로 시작하기</Text>
+        </RouterLink>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { onMounted } from 'vue'
+import { useRoute } from 'vue-router'
+import { useSignupStore } from '@/stores/signup'
+
+const route = useRoute()
+const signupStore = useSignupStore()
+
+onMounted(() => {
+  // 쿼리 파라미터 저장 (OAuth/서비스 리다이렉트 정보)
+  const { callbackUrl, redirectUri, serviceId, clientId, responseType, scope, state } = route.query
+  signupStore.setCallbackUrl(callbackUrl || redirectUri || '')
+  signupStore.setServiceId(serviceId ?? '')
+  signupStore.setClientId(clientId ?? '')
+  signupStore.setResponseType(responseType ?? '')
+  signupStore.setScope(scope ?? '')
+  signupStore.setState(state ?? '')
+})
+</script>
+```
+
+**핵심 구현 사항**:
+
+1. **쿼리 파라미터 보존**
+   - 외부 서비스에서 로그인 요청 시 전달된 쿼리 파라미터를 스토어에 저장
+   - OAuth 요청(`client_id`, `response_type`, `scope`)이나 서비스 요청(`serviceId`, `callbackUrl`) 정보를 유지
+   - 외부에서 유입되는 OAuth 파라미터는 snake_case로 들어오기 때문에, 내부에서는 camelCase로 정규화하여 전 구간에서 동일한 키로 처리
+   - 로그인/회원가입 완료 후 원래 서비스로 복귀하기 위한 정보
+
+2. **라우팅 시 쿼리 전달**
+   - `:to="{ path: '/login', query: { ...route.query } }"`로 현재 쿼리를 그대로 전달
+   - 이메일 로그인 페이지로 이동할 때도 OAuth/서비스 정보 유지
+
+3. **소셜 로그인 버튼**
+   - `SocialProviderButton` 컴포넌트는 provider prop으로 제공자 구분
+   - 각 버튼 내부에서 소셜 제공자별 인증 방식 처리
+
+여기서 중요한 점은, 어떤 버튼을 클릭하든 결국 다음 단계인 '인증 처리'를 거쳐 마지막 '공통 후처리' 로직으로 모이게 된다는 것입니다.
+
+### 단계 2A: 소셜 로그인 (네이버 / 구글)
+
+소셜 로그인은 OAuth 2.0 프로토콜을 따릅니다. 프론트엔드에서의 흐름은 다음과 같습니다.
+
+#### Google 소셜 로그인 버튼
+
+```vue
+// components/auth/SocialProviderButton.vue (Google 관련 로직)
+
+<script setup>
+import { ref } from 'vue'
+import { SocialAuthService } from '@/services/socialAuth'
+import { useSocialAuth } from '@/composables/useSocialAuth'
+import { useResponsive } from '@/composables/useResponsive'
+
+const props = defineProps({
+  provider: {
+    type: String,
+    required: true,
+    validator: (value) => ['google', 'naver'].includes(value)
+  }
+})
+
+const socialAuth = useSocialAuth()
+const { isMobile } = useResponsive()
+const tokenClient = ref(null)
+
+// WebView 환경 감지
+const isWebView =
+  typeof window !== 'undefined' && window?.AppBridge?.startSocialLogin
+
+const callbackUrl = new URLSearchParams(window.location.search).get('callbackUrl')
+const serviceId = new URLSearchParams(window.location.search).get('serviceId')
+
+const onScriptLoaded = (event = null) => {
+  if (!event) return
+
+  try {
+    // OAuth Token Client 초기화
+    tokenClient.value = SocialAuthService.Google.init(
+      import.meta.env.VITE_GOOGLE_CLIENT_ID,
+      onAuthSuccess
+    )
+    tokenClient.value.requestAccessToken()
+  } catch (error) {
+    console.error('Google script load error', error)
+    showError('인증 중 오류가 발생했습니다.')
+  }
+}
+
+const onAuthSuccess = async (tokenResponse) => {
+  // Access Token 획득 성공
+  await socialAuth.authenticate(props.provider, tokenResponse.access_token)
+}
+
+const onClickHandler = () => {
+  // WebView 환경: 앱 브리지 호출
+  if (isWebView) {
+    const baseUrl = window.location.origin
+    let url = '/social-login/google'
+    if (callbackUrl && serviceId) {
+      url += `?callbackUrl=${callbackUrl}&serviceId=${serviceId}`
+    }
+    window?.AppBridge?.startSocialLogin(baseUrl + url)
+    return
+  }
+
+  // 일반 웹 환경: 동적 스크립트 로드
+  try {
+    const script = document.createElement('script')
+    script.onload = onScriptLoaded
+    script.onerror = () => showError('인증 스크립트 로드에 실패했습니다.')
+    script.type = 'text/javascript'
+    script.src = 'https://accounts.google.com/gsi/client'
+    document.head.appendChild(script)
+  } catch (error) {
+    console.error('Google script error', error)
+    showError('인증 중 오류가 발생했습니다.')
+  }
+}
+</script>
+```
+
+**핵심 구현 사항**:
+
+1. **환경 자동 감지**
+   - `window.AppBridge.startSocialLogin` 존재 여부로 WebView 판단
+   - WebView: 앱 브리지로 인증 페이지 열기 → Intent URI로 복귀
+   - 일반 웹: OAuth SDK 스크립트 동적 로드 → 팝업 인증
+
+2. **동적 스크립트 로드**
+   - 사용자 클릭 시점에 SDK 스크립트 로드
+   - 로드 완료 후 즉시 `requestAccessToken()` 호출하여 OAuth 팝업 표시
+
+3. **토큰 처리**
+   - `onAuthSuccess`에서 Access Token 획득
+   - `socialAuth.authenticate(provider, token)` 호출로 백엔드 인증 시도
+
+#### Naver 소셜 로그인 버튼
+
+```vue
+// components/auth/SocialProviderButton.vue (Naver 관련 로직)
+
+<script setup>
+import { SocialAuthService } from '@/services/socialAuth'
+import { useRoute } from 'vue-router'
+
+const route = useRoute()
+
+function buildQueryString(queryParams) {
+  return Object.keys(queryParams)
+    .map((key) => `${key}=${route.query[key]}`)
+    .join('&')
+}
+
+function handleNaverLogin() {
+  // Naver OAuth 초기화 (mode=LOGIN + 현재 쿼리 파라미터 전달)
+  const naverAuth = SocialAuthService.Naver.init('LOGIN', buildQueryString(route.query))
+
+  // Naver OAuth 인증 페이지로 전체 페이지 리다이렉트
+  window.location.href = naverAuth.generateAuthorizeUrl()
+}
+</script>
+```
+
+**핵심 구현 사항**:
+
+1. **쿼리 파라미터 전달**
+   - 현재 페이지의 모든 쿼리 파라미터를 콜백 URL에 포함
+   - OAuth 완료 후 동일한 파라미터로 복귀
+
+2. **전체 페이지 리다이렉트**
+   - `window.location.href`로 OAuth 페이지로 이동
+   - 팝업이 아닌 전체 페이지 방식 (플랫폼 권장 방식)
+
+#### 소셜 인증 서비스 초기화
+
+```javascript
+// services/socialAuth.js
+
+export const SocialAuthService = {}
+
+// Google OAuth 2.0 초기화
+SocialAuthService.Google = {}
+SocialAuthService.Google.init = (clientId, callback, errorCallback) => {
+  return google.accounts.oauth2.initTokenClient({
+    client_id: clientId,
+    scope: [
+      'https://www.googleapis.com/auth/userinfo.email',
+      'https://www.googleapis.com/auth/userinfo.profile'
+    ].join(' '),
+    callback,
+    error_callback: errorCallback
+  })
+}
+
+// Naver OAuth 2.0 초기화
+SocialAuthService.Naver = {}
+SocialAuthService.Naver.init = (mode, queryParams) => {
+  const callbackUrl =
+    window.location.origin + '/callback/social/naver?' + buildNaverCallbackQuery(mode, queryParams)
+  const naverAuth = new naver.LoginWithNaverId({
+    clientId: import.meta.env.VITE_NAVER_CLIENT_ID,
+    callbackUrl: callbackUrl,
+    isPopup: false
+  })
+  naverAuth.init()
+  return naverAuth
+}
+```
+
+### 단계 2B: 이메일 로그인
+
+이메일 로그인은 더 직접적입니다. 사용자가 입력한 이메일과 비밀번호를 백엔드 API로 전송합니다.
+
+```vue
+// views/EmailLoginView.vue
+
+<template>
+  <div class="email-login-page">
+    <form v-on:submit.prevent="submitForm">
+      <AppLogo :width="logoSize.width" :height="logoSize.height" />
+      <div class="login-form">
+        <TextInput
+          v-model="formFields.email.value"
+          :error="formFields.email.error"
+          placeholder="이메일을 입력해주세요."
+        />
+        <TextInput
+          v-model="formFields.password.value"
+          :error="formFields.password.error"
+          type="password"
+          placeholder="비밀번호를 입력해주세요."
+        />
+        <Checkbox
+          :label="{ text: '로그인 상태 유지' }"
+          v-model="rememberMe"
+        />
+        <Button
+          type="submit"
+          :disabled="!isFormValid"
+        >
+          로그인
+        </Button>
+      </div>
+    </form>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+import { usePostAuth } from '@/composables/usePostAuth'
+import { useFormValidation } from '@/composables/useFormValidation'
+
+const route = useRoute()
+const router = useRouter()
+const authStore = useAuthStore()
+const postAuth = usePostAuth()
+
+const rememberMe = ref(false)
+const formFields = ref({
+  email: {
+    value: '',
+    error: null,
+    validate: (value) => {
+      const emailRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$/i
+      return emailRegex.test(value) ? null : '올바른 이메일 형식이 아닙니다.'
+    }
+  },
+  password: {
+    value: '',
+    error: null,
+    validate: (value) => {
+      return value.length >= 6 ? null : '비밀번호는 6자 이상이어야 합니다.'
+    }
+  }
+})
+
+const isFormValid = computed(() => {
+  return formFields.value.email.value && formFields.value.password.value
+})
+
+const { submitForm } = useFormValidation(formFields.value, onSubmit)
+
+async function onSubmit() {
+  try {
+    // authStore.login() 호출: POST /api/v1/auth/login
+    await authStore.login(
+      formFields.value.email.value,
+      formFields.value.password.value,
+      rememberMe.value
+    )
+    await handlePostLogin()
+  } catch (err) {
+    console.error('Login error:', err)
+    formFields.value.email.error = true
+    formFields.value.password.error = true
+    // 에러 토스트 표시
+    showError(getErrorMessage(err))
+  }
+}
+
+async function handlePostLogin() {
+  // 이메일 인증 여부 확인
+  const user = authStore.currentUser
+  if (user.emailVerified) {
+    await postAuth.execute()
+  } else {
+    await router.push({ path: '/verify-email', query: route.query })
+  }
+}
+
+function getErrorMessage(err) {
+  if (err.response?.status === 400) {
+    return '이메일 또는 비밀번호가 일치하지 않습니다.'
+  }
+  return '일시적인 오류로 로그인을 할 수 없습니다. 잠시 후에 다시 이용해주세요.'
+}
+</script>
+```
+
+**핵심 구현 사항**:
+
+1. **폼 유효성 검증**
+   - 이메일: 정규식으로 형식 검증
+   - 비밀번호: 최소 6자 이상
+   - `useFormValidation` 컴포저블로 재사용 가능한 검증 로직
+
+2. **로그인 상태 유지**
+   - `rememberMe` 체크박스로 사용자 선택
+   - 백엔드에 파라미터 전달
+   - 백엔드에서 장기 쿠키 생성
+
+3. **이메일 미인증 처리**
+   - `user.emailVerified` 확인
+   - `false`인 경우 `/verify-email`로 강제 리다이렉트
+   - `true`인 경우 `postAuth.execute()` 호출
+
+### 단계 2C: 이메일 회원가입 (3단계)
+
+회원가입은 복잡한 요구사항을 만족하기 위해 3단계로 나뉩니다.
+
+```vue
+// views/SignupView.vue
+
+<template>
+  <div class="sign-up-page">
+    <EmailVerificationStep v-if="currentStep === 1" />
+    <AgeVerificationStep v-else-if="currentStep === 2" />
+    <CompletionStep v-else-if="currentStep === 3" />
+  </div>
+</template>
+
+<script setup>
+import { onBeforeMount, onBeforeUnmount } from 'vue'
+import EmailVerificationStep from '@/components/signup/EmailVerificationStep.vue'
+import AgeVerificationStep from '@/components/signup/AgeVerificationStep.vue'
+import CompletionStep from '@/components/signup/CompletionStep.vue'
+import { useSignupStore } from '@/stores/signup'
+import { storeToRefs } from 'pinia'
+import { useIdentityVerification } from '@/composables/useIdentityVerification'
+
+const signupStore = useSignupStore()
+const { getVerificationInfo, getRedirectUrl } = useIdentityVerification()
+
+const { currentStep } = storeToRefs(signupStore)
+
+onBeforeMount(() => {
+  // 본인인증 후 복귀 시 Step 2로 자동 이동
+  const verificationInfo = getVerificationInfo()
+  const redirectUrl = getRedirectUrl()
+  const savedBirthday = signupStore.getBirthday()
+
+  if (
+    (verificationInfo && redirectUrl) ||
+    ((!verificationInfo || !redirectUrl) && savedBirthday)
+  ) {
+    signupStore.setStep(2)
+  }
+})
+
+onBeforeUnmount(() => {
+  if (currentStep.value === 3) {
+    signupStore.reset()
+  }
+})
+</script>
+```
+
+**Step 1: EmailVerificationStep**
+
+- 이메일 입력 및 중복 확인 (`checkEmailAvailability()`)
+- 이메일 인증 코드 발송 (`sendVerificationEmail()`)
+- 인증 코드 검증 (`verifyCode()`, 타이머 기능)
+- 비밀번호 입력 (소셜 가입 시 제외)
+- 닉네임 입력 및 중복 확인 (`checkNicknameAvailability()`)
+- 약관 동의 (필수 항목)
+
+**Step 2: AgeVerificationStep**
+
+- 생년월일 선택 (Dropdown)
+- 미성년자 여부 확인
+- 미성년자: 법정대리인 동의 + 본인인증
+- 성인: 바로 가입
+- `submitSignup()` 또는 `submitSocialSignup()` 호출
+
+**Step 3: CompletionStep**
+
+- 가입 완료 안내
+- `signupStore.redirectToCallback()` 자동 실행
+- OAuth 또는 서비스로 리다이렉트
+
+### 단계 3: 소셜 로그인 콜백 및 비즈니스 로직
+
+소셜 로그인 완료 후 콜백 페이지에서 토큰을 추출하고 백엔드 인증을 시도합니다.
+
+#### Google 콜백
+
+```vue
+// views/callback/GoogleCallbackView.vue
+
+<script setup>
+import { onMounted } from 'vue'
+import { useRoute } from 'vue-router'
+import { useSocialAuth } from '@/composables/useSocialAuth'
+import { useSignupStore } from '@/stores/signup'
+
+const route = useRoute()
+const socialAuth = useSocialAuth()
+const signupStore = useSignupStore()
+
+onMounted(async () => {
+  const { token, serviceId, callbackUrl } = route.query
+
+  if (!token) {
+    showError('잘못된 접근입니다.')
+    return
+  }
+
+  // 서비스 리다이렉트 정보 저장
+  if (callbackUrl && serviceId) {
+    signupStore.setCallbackUrl(callbackUrl)
+    signupStore.setServiceId(serviceId)
+  }
+
+  if (serviceId) {
+    // 로그인 모드
+    await socialAuth.authenticate('google', token)
+  } else {
+    // 연동 모드
+    await socialAuth.linkAccount('google', token, false)
+  }
+})
+</script>
+```
+
+#### Naver 콜백
+
+```vue
+// views/callback/NaverCallbackView.vue
+
+<script setup>
+import { onMounted } from 'vue'
+import { useRoute } from 'vue-router'
+import { SocialAuthService } from '@/services/socialAuth'
+import { useSocialAuth } from '@/composables/useSocialAuth'
+
+const route = useRoute()
+const socialAuth = useSocialAuth()
+
+onMounted(async () => {
+  // Naver 콜백 초기화 (accessToken 추출)
+  const naverAuth = SocialAuthService.Naver.initCallback()
+
+  try {
+    await SocialAuthService.Naver.getStatus(naverAuth)
+    const accessToken = naverAuth.accessToken.accessToken
+
+    const mode = route.query.mode
+
+    if (mode === 'LOGIN') {
+      await socialAuth.authenticate('naver', accessToken)
+    } else {
+      await socialAuth.linkAccount('naver', accessToken, false)
+    }
+  } catch (error) {
+    console.error('Naver authentication failed', error)
+    showError('인증에 실패했습니다.')
+  }
+})
+</script>
+```
+
+#### 소셜 로그인 비즈니스 로직
+
+```javascript
+// composables/useSocialAuth.js
+
+export function useSocialAuth() {
+  const router = useRouter()
+  const postAuth = usePostAuth()
+  const authStore = useAuthStore()
+  const signupStore = useSignupStore()
+
+  async function authenticate(provider, token) {
+    try {
+      // 백엔드 소셜 로그인 API 호출
+      await authStore.loginWithSocial(provider, token)
+      // 로그인 성공 시 공통 후처리
+      await postAuth.execute()
+    } catch (err) {
+      console.error('Social authentication error', err)
+      // 로그인 실패 시 회원가입 플로우로 전환
+      await handleAuthFailure(provider, token)
+    }
+  }
+
+  async function handleAuthFailure(provider, token) {
+    // 소셜 계정 정보 조회
+    const { data } = await authApi.checkSocialUserExistence(provider, token)
+    const { email, exists, emailExists, emailVerified, nickname, birthday } = data
+
+    // Signup Store에 소셜 정보 프리필
+    signupStore.setSocialProvider(provider)
+    signupStore.setSocialToken(token)
+    if (nickname) signupStore.setNickname(nickname.substring(0, 30))
+    if (birthday) signupStore.setBirthday(birthday)
+
+    // 에러 케이스별 처리
+    if (exists) {
+      showError('이미 가입한 이메일입니다. 이메일·비밀번호로 로그인하시거나, 다른 이메일로 가입해주세요.')
+      return
+    } else if (emailExists) {
+      showError(`해당 "${email}"는 이메일로 가입된 계정이에요. 이메일 계정으로 로그인하신 후, 소셜 계정을 연동해 주세요.`)
+      return
+    } else if (emailVerified === false) {
+      showError('이메일 인증이 완료되지 않았습니다. 해당 소셜 사이트에서 이메일 인증 후 진행해주세요.')
+      return
+    }
+
+    // 신규 회원 → 회원가입 페이지로 이동 (이메일 자동 입력)
+    signupStore.setEmail(email)
+    router.push('/signup')
+  }
+
+  async function linkAccount(provider, token, isSignup) {
+    try {
+      await authStore.linkSocialAccount(provider, token)
+      console.info(`Successfully linked ${provider}`)
+
+      if (isSignup) {
+        signupStore.redirectToCallback()
+      } else {
+        window.location.href = '/dashboard'
+      }
+    } catch (error) {
+      console.error(`Error linking ${provider}`, error)
+      showError('계정 연동에 실패했습니다.')
+    }
+  }
+
+  async function unlinkAccount(provider) {
+    try {
+      await authStore.unlinkSocialAccount(provider)
+      console.info(`Successfully unlinked ${provider}`)
+    } catch (error) {
+      console.error(`Error unlinking ${provider}`, error)
+      showError('계정 연동 해제에 실패했습니다.')
+    }
+  }
+
+  return { authenticate, linkAccount, unlinkAccount }
+}
+```
+
+### 단계 4: 하나로 합쳐지는 길 (Merge) - usePostAuth
+
+**`usePostAuth` 컴포저블의 역할**
+
+인증 방식에 상관없이, 로그인 성공 후에는 동일한 후처리 로직이 실행됩니다.
+
+```javascript
+// composables/usePostAuth.js
+
+export function usePostAuth() {
+  const router = useRouter()
+  const route = useRoute()
+  const authStore = useAuthStore()
+  const serviceStore = useServiceStore()
+  const oauthStore = useOAuthStore()
+
+  // 쿼리 파라미터 추출
+  let serviceId = route.query?.serviceId
+  let callbackUrl = route.query?.callbackUrl
+  let responseType = route.query?.response_type
+  let clientId = route.query?.client_id
+  let redirectUri = route.query?.redirect_uri
+  let scope = route.query?.scope
+  let state = route.query?.state
+
+  // OAuth 요청 여부
+  function isOAuthRequest() {
+    return responseType && clientId && redirectUri && scope
+  }
+
+  // 서비스 리다이렉트 여부
+  function isServiceRedirect() {
+    return serviceId && callbackUrl
+  }
+
+  // OAuth 클라이언트 승인
+  async function approveOAuthRequest() {
+    const { data } = await authApi.approveOAuth(
+      clientId, responseType, redirectUri, scope, state
+    )
+
+    let url
+    if (responseType === 'code') {
+      url = redirectUri + '?code=' + data.code
+      if (state) url += '&state=' + state
+    } else {
+      url = redirectUri + '#accessToken=' + data.accessToken
+      if (state) url += '&state=' + state
+    }
+    window.location.href = url
+  }
+
+  // OAuth 콜백 처리
+  async function handleOAuthCallback() {
+    if (authStore.hasOAuthConsent(clientId)) {
+      return approveOAuthRequest()
+    }
+    return await router.push({ path: '/consent', query: route.query })
+  }
+
+  // 서비스 리다이렉트
+  async function redirectToService() {
+    const service = await serviceStore.getService(serviceId)
+
+    if (!service) {
+      showError('올바른 서비스 명이 아닙니다.')
+      return
+    }
+
+    window.location.href =
+      window.location.origin +
+      '/api/v1/auth/complete?serviceId=' + serviceId +
+      '&callbackUrl=' + callbackUrl
+  }
+
+  // 메인 실행 함수
+  async function execute() {
+    if (isOAuthRequest()) {
+      return await handleOAuthCallback()
+    } else if (isServiceRedirect()) {
+      return await redirectToService()
+    } else {
+      return router.replace('/dashboard')
+    }
+  }
+
+  return { execute, approveOAuthRequest }
+}
+```
+
+**핵심 구현 사항**:
+
+1. **쿼리 파라미터 기반 분기**
+   - OAuth: `response_type`, `client_id`, `redirect_uri`, `scope` 필수
+   - 서비스: `serviceId`, `callbackUrl` 필수
+   - 우선순위: OAuth > 서비스 > 메인 페이지
+
+2. **OAuth 2.0 플로우**
+   - `hasOAuthConsent()`: 승인 이력 확인
+   - 승인 이력 있음: 즉시 인증 코드 발급
+   - 승인 이력 없음: `/consent` 페이지로 이동
+
+3. **서비스 리다이렉트**
+   - 서비스 정보 조회 (캐시 활용)
+   - 접근 권한 확인
+   - 백엔드 엔드포인트로 리다이렉트
+
+이제 각 로그인 컴포넌트에서는 `usePostAuth`를 호출하기만 하면 됩니다.
+
+```javascript
+// 이메일 로그인
+const postAuth = usePostAuth()
+await authStore.login(email, password, rememberMe)
+await postAuth.execute()
+
+// 소셜 로그인 (useSocialAuth 내부)
+async function authenticate(provider, token) {
+  await authStore.loginWithSocial(provider, token)
+  await postAuth.execute()
+}
+
+// 회원가입 완료
+signupStore.redirectToCallback()
+// 내부적으로 postAuth.execute()와 동일한 로직
+```
+
+## 3. 상태 관리: Pinia Store의 역할
+
+통합 로그인 플로우에서 Pinia Store는 세 가지 핵심 역할을 담당합니다.
+
+### Auth Store (사용자 인증 상태)
+
+```javascript
+// stores/auth.js
+
+export const useAuthStore = defineStore('auth', () => {
+  const isAuthenticated = ref(false)
+  const currentUser = ref({
+    email: '',
+    nickname: '',
+    socialAccounts: [],
+    authorizedServices: [],
+    oauthConsents: [],
+    emailVerified: false
+  })
+
+  async function login(email, password, rememberMe) {
+    const { data } = await authApi.login(email, password, rememberMe)
+    setUserData(data)
+  }
+
+  async function loginWithSocial(provider, token) {
+    const { data } = await authApi.socialLogin(provider, token)
+    setUserData(data)
+  }
+
+  function setUserData(userData) {
+    isAuthenticated.value = true
+    currentUser.value = userData
+    sessionStorage.setItem('isAuthenticated', 'true')
+    sessionStorage.setItem('currentUser', JSON.stringify(userData))
+  }
+
+  async function linkSocialAccount(provider, token) {
+    const { data } = await authApi.linkSocial(provider, token)
+    currentUser.value.socialAccounts = data.socialAccounts
+  }
+
+  function hasOAuthConsent(clientId) {
+    return currentUser.value.oauthConsents?.includes(clientId)
+  }
+
+  return {
+    isAuthenticated,
+    currentUser,
+    login,
+    loginWithSocial,
+    setUserData,
+    linkSocialAccount,
+    hasOAuthConsent
+  }
+})
+```
+
+### Signup Store (회원가입 진행 상태)
+
+```javascript
+// stores/signup.js
+
+export const useSignupStore = defineStore('signup', () => {
+  const router = useRouter()
+  const authStore = useAuthStore()
+
+  // State
+  const email = ref('')
+  const password = ref('')
+  const nickname = ref('')
+  const birthday = ref('')
+  const socialToken = ref('')
+  const socialProvider = ref('')
+  const termsAgreed = ref(false)
+  const privacyAgreed = ref(false)
+
+  // OAuth/서비스 리다이렉트 정보
+  const callbackUrl = ref('')
+  const serviceId = ref('')
+  const clientId = ref('')
+  const responseType = ref('')
+  const redirectUri = ref('')
+  const scope = ref('')
+  const state = ref('')
+
+  const currentStep = ref(1)
+
+  // Actions
+  async function submitSignup() {
+    const { data } = await authApi.signup({
+      email: email.value,
+      password: password.value,
+      nickname: nickname.value,
+      birthday: birthday.value,
+      termsAgreed: termsAgreed.value,
+      privacyAgreed: privacyAgreed.value
+    })
+    authStore.setUserData(data)
+  }
+
+  async function submitSocialSignup() {
+    const { data } = await authApi.socialSignup({
+      provider: socialProvider.value,
+      token: socialToken.value,
+      nickname: nickname.value,
+      birthday: birthday.value,
+      termsAgreed: termsAgreed.value,
+      privacyAgreed: privacyAgreed.value
+    })
+    authStore.setUserData(data)
+  }
+
+  function redirectToCallback() {
+    const query = {}
+    if (callbackUrl.value && serviceId.value) {
+      query.serviceId = serviceId.value
+      query.callbackUrl = callbackUrl.value
+    } else if (clientId.value && responseType.value) {
+      query.client_id = clientId.value
+      query.response_type = responseType.value
+      query.redirect_uri = redirectUri.value
+      query.scope = scope.value
+      query.state = state.value
+    }
+    router.push({ path: '/dashboard', query })
+  }
+
+  function reset() {
+    email.value = ''
+    password.value = ''
+    nickname.value = ''
+    birthday.value = ''
+    socialToken.value = ''
+    socialProvider.value = ''
+    termsAgreed.value = false
+    privacyAgreed.value = false
+    callbackUrl.value = ''
+    serviceId.value = ''
+    clientId.value = ''
+    responseType.value = ''
+    redirectUri.value = ''
+    scope.value = ''
+    state.value = ''
+    currentStep.value = 1
+  }
+
+  return {
+    // State
+    email,
+    password,
+    nickname,
+    birthday,
+    socialToken,
+    socialProvider,
+    termsAgreed,
+    privacyAgreed,
+    callbackUrl,
+    serviceId,
+    clientId,
+    responseType,
+    redirectUri,
+    scope,
+    state,
+    currentStep,
+    // Actions
+    submitSignup,
+    submitSocialSignup,
+    redirectToCallback,
+    reset
+  }
+}, {
+  persist: {
+    enabled: true,
+    strategies: [
+      {
+        storage: sessionStorage,
+        paths: ['email', 'nickname', 'birthday', 'socialProvider', 'currentStep']
+      }
+    ]
+  }
+})
+```
+
+**핵심 역할**:
+
+1. **쿼리 파라미터 보존**: OAuth/서비스 리다이렉트 정보 저장
+2. **회원가입 진행 상태**: 3단계 플로우의 입력 데이터 저장
+3. **소셜 정보 프리필**: 이메일/닉네임/생년월일 자동 입력
+4. **sessionStorage 영속화**: 페이지 새로고침 시 상태 유지
+
+## 4. 이렇게 통합하여 얻은 것들
+
+### 코드 재사용성
+
+`usePostAuth` 컴포저블 하나로 이메일 로그인, 네이버 로그인, 구글 로그인, 회원가입 모두 동일한 후처리 로직을 공유합니다. 새로운 소셜 로그인 제공자를 추가하더라도 해당 인증 처리 로직만 구현하면 됩니다.
+
+### 유지보수성
+
+리다이렉트 로직을 수정해야 할 때, 하나의 파일만 수정하면 모든 로그인 방식에 즉시 반영됩니다.
+
+### 일관된 사용자 경험
+
+어떤 방식으로 로그인하든 동일한 흐름으로 최종 목적지(메인 페이지 또는 외부 서비스)로 이동하므로, 사용자는 일관된 경험을 받습니다.
+
+### 확장성
+
+OAuth 2.0 표준을 준수하여 외부 서비스 연동이 쉽고, 생태계 내 여러 서비스와의 SSO(Single Sign-On)도 자연스럽게 지원됩니다.
+
+## 마무리
+
+처음에는 로그인 버튼 3개만 만들면 해결될 것이라고 생각했습니다.
+하지만 구현을 진행하면서 OAuth 콜백 처리, 신규/기존 회원 분기, 외부 서비스 리다이렉트, 실패 처리 등 고려해야 할 케이스가 예상보다 훨씬 많았습니다.
+
+이에 전체 플로우를 다이어그램으로 시각화해 정리했고,
+그 결과 공통 후처리 레이어(usePostAuth)를 설계·구현하는 과정도 한층 수월해졌습니다.
+또한 이후 디버깅과 유지보수 측면에서도 흐름을 빠르게 추적할 수 있어 작업 효율이 크게 개선되었습니다.

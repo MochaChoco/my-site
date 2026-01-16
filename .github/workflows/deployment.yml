@@ -39,6 +39,12 @@ jobs:
             ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json', '**/yarn.lock') }}-
       - name: Install dependencies
         run: npm ci
+      - name: Ensure TS config is used
+        run: |
+          if [ -f next.config.js ]; then
+            echo "Removing generated next.config.js so next.config.ts is used."
+            rm next.config.js
+          fi
       - name: Build
         run: npm run build:export
       - name: Debug git

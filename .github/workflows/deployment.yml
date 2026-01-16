@@ -41,14 +41,14 @@ jobs:
         run: npm ci
       - name: Build
         run: npm run build:export
-      - name: Debug output
-        run: |
-          ls -la
-          ls -la out
       - name: Debug git
         run: |
           git rev-parse HEAD
           git status -sb
+      - name: Debug output
+        run: |
+          ls -la
+          ls -la out || true
       - name: Add .nojekyll file
         run: touch ./out/.nojekyll
       - name: Upload artifact

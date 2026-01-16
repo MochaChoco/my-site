@@ -45,6 +45,10 @@ jobs:
         run: |
           ls -la
           ls -la out
+      - name: Debug git
+        run: |
+          git rev-parse HEAD
+          git status -sb
       - name: Add .nojekyll file
         run: touch ./out/.nojekyll
       - name: Upload artifact

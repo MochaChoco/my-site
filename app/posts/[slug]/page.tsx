@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { CopyButton } from "@/components/copy-button";
 import { cn } from "@/lib/utils";
+import { withBasePath } from "@/lib/base-path";
 
 export async function generateStaticParams() {
   const posts = await getAllPosts();
@@ -14,7 +15,6 @@ export async function generateStaticParams() {
 }
 
 const SITE_URL = "https://mochachoco.github.io/my-site";
-const assetBasePath = "/my-site";
 
 const normalizeBasePath = (value: string) => {
   const trimmed = value.trim();
@@ -104,7 +104,7 @@ const components = {
   ),
   // Override img to handle basePath for static exports
   img: ({ src, alt, ...props }: any) => {
-    const imageSrc = src?.startsWith("/") ? `${assetBasePath}${src}` : src;
+    const imageSrc = src ? withBasePath(src) : src;
     return <img src={imageSrc} alt={alt || ""} {...props} />;
   },
 };

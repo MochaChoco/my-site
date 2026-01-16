@@ -1,12 +1,12 @@
 import Link from "next/link";
 import Image from "next/image";
 import { PostMeta } from "@/lib/posts";
+import { withBasePath } from "@/lib/base-path";
 
 export function PostCard({ post }: { post: PostMeta }) {
-  const basePath = "/my-site";
-  const defaultCover = `${basePath}/images/default-blog-cover.png`;
+  const defaultCover = withBasePath("/images/default-blog-cover.png");
   const coverImage = post.frontmatter.coverImage
-    ? `${basePath}${post.frontmatter.coverImage}`
+    ? withBasePath(post.frontmatter.coverImage)
     : defaultCover;
 
   return (

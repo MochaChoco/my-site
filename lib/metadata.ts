@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-const SITE_URL = "https://mochachoco.github.io/my-site";
+const SITE_URL = "https://mochachoco.github.io/blog";
 
 const DEFAULT_TITLE = "DevBlog";
 const DEFAULT_DESCRIPTION = "웹 개발자의 기술블로그입니다.";

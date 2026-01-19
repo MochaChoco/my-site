@@ -7,14 +7,14 @@ const isExport =
 
 const nextConfig: NextConfig = {
   output: isExport ? "export" : undefined,
-  basePath: isExport ? "/my-site" : "",
-  assetPrefix: isExport ? "/my-site" : "",
+  basePath: isExport ? "/blog" : "",
+  assetPrefix: isExport ? "/blog" : "",
   trailingSlash: isExport,
   images: {
     unoptimized: isExport,
   },
   env: {
-    NEXT_PUBLIC_BASE_PATH: isExport ? "/my-site" : "",
+    NEXT_PUBLIC_BASE_PATH: isExport ? "/blog" : "",
   },
 };
 

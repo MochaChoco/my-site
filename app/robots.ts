@@ -8,6 +8,6 @@ export default function robots(): MetadataRoute.Robots {
       userAgent: "*",
       allow: "/",
     },
-    sitemap: "https://mochachoco.github.io/my-site/sitemap.xml",
+    sitemap: "https://mochachoco.github.io/blog/sitemap.xml",
   };
 }

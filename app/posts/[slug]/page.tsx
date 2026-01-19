@@ -14,7 +14,7 @@ export async function generateStaticParams() {
   }));
 }
 
-const SITE_URL = "https://mochachoco.github.io/my-site";
+const SITE_URL = "https://mochachoco.github.io/blog";
 
 const normalizeBasePath = (value: string) => {
   const trimmed = value.trim();

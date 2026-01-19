@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server";
 export function middleware(request: NextRequest) {
   console.log("Middleware executed for:", request.nextUrl.pathname);
   // if (request.nextUrl.pathname === "/") {
-  //   return NextResponse.redirect(new URL("/my-site/", request.url));
+  //   return NextResponse.redirect(new URL("/blog/", request.url));
   // }
 }
 

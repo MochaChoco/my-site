@@ -3,7 +3,7 @@ import { MetadataRoute } from "next";
 
 export const dynamic = "force-static";
 
-const SITE_URL = "https://mochachoco.github.io/my-site";
+const SITE_URL = "https://mochachoco.github.io/blog";
 
 const normalizeBasePath = (value: string) => {
   const trimmed = value.trim();

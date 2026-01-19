@@ -6,6 +6,7 @@ import type { Metadata } from "next";
 import { CopyButton } from "@/components/copy-button";
 import { cn } from "@/lib/utils";
 import { withBasePath } from "@/lib/base-path";
+import type { ComponentPropsWithoutRef } from "react";
 
 export async function generateStaticParams() {
   const posts = await getAllPosts();
@@ -85,7 +86,7 @@ export async function generateMetadata({
 
 const components = {
   // Simple Override for Pre to include Copy Button
-  pre: ({ children, className, ...props }: any) => (
+  pre: ({ children, className, ...props }: ComponentPropsWithoutRef<"pre">) => (
     <div className="relative group">
       <pre
         className={cn(
@@ -103,9 +104,25 @@ const components = {
     </div>
   ),
   // Override img to handle basePath for static exports
-  img: ({ src, alt, ...props }: any) => {
-    const imageSrc = src ? withBasePath(src) : src;
+  img: ({ src, alt, ...props }: ComponentPropsWithoutRef<"img">) => {
+    const imageSrc = typeof src === "string" ? withBasePath(src) : src;
     return <img src={imageSrc} alt={alt || ""} {...props} />;
+  },
+  // Open MDX links in a new tab by default (except in-page anchors like #section).
+  a: ({ href, children, ...props }: ComponentPropsWithoutRef<"a">) => {
+    const resolvedHref =
+      typeof href === "string" ? withBasePath(href) : href;
+    const shouldOpenInNewTab =
+      typeof resolvedHref === "string" && !resolvedHref.startsWith("#");
+    const target = props.target ?? (shouldOpenInNewTab ? "_blank" : undefined);
+    const rel =
+      target === "_blank" ? (props.rel ?? "noopener noreferrer") : props.rel;
+
+    return (
+      <a href={resolvedHref} target={target} rel={rel} {...props}>
+        {children}
+      </a>
+    );
   },
 };
 

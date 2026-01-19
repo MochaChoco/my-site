@@ -1,0 +1,259 @@
+---
+title: "Next.js 프로젝트에 SEO 적용하기"
+description: "Next.js에서 메타 태그 설정, 리소스 최적화, URL 구성, 링크 처리 등 검색 엔진 최적화(SEO)를 위해 점검했던 항목들을 정리합니다."
+date: "2023-09-19"
+tags: ["nextjs", "seo", "frontend"]
+slug: "nextjs-seo"
+coverImage: "/images/posts/nextjs-seo/cover.png"
+---
+
+![커버 이미지](/images/posts/nextjs-seo/cover.png)
+
+## SEO란?
+
+SEO는 `Search Engine Optimization`의 약자로, 검색 엔진 최적화를 의미합니다. 구글이나 네이버와 같은 검색 엔진에 사이트가 더 잘 노출되도록 여러 최적화 작업을 진행하는 것을 말합니다. SEO를 위해 고려해야 할 사항들은 다음과 같습니다.
+
+### 1. title, meta 태그 설정
+
+HTML의 `title` 태그는 웹사이트의 이름을, `meta` 태그는 페이지의 메타데이터 정보를 담고 있습니다. 메타데이터는 여러 종류가 있지만 SEO에 영향을 크게 주는 항목은 다음과 같습니다.
+
+- title : 웹 사이트의 이름
+- description: 웹 사이트에 대한 설명
+- robots : 크롤러의 동작을 명시
+
+![이미지1](/images/posts/nextjs-seo/image1.png)
+
+- charset : 해당 페이지가 인코딩된 형태를 명시
+- viewport : viewport에 대한 명세(대다수 모바일 브라우저를 위한 정보)입니다.
+- keyword : 웹 사이트를 요약하는 키워드 목록
+- author: 웹 사이트의 저작자
+
+Next.js에서는 기본 제공되는 `Head` 컴포넌트를 사용하여 `_document.tsx`에 전역 메타 태그를 넣거나, 페이지별로 다른 메타 태그를 설정할 수 있습니다. 게시판처럼 query로 제어되는 페이지도 상황에 맞게 각기 다른 메타 태그를 설정할 수 있습니다.
+
+```jsx
+// _document.tsx
+// 전역에 넣어서 사용하는 코드
+import { Html, Head, Main, NextScript } from "next/document";
+
+export default function Document() {
+  return (
+    <Html lang="en">
+      <Head>
+        <title>Test Seo Web</title>
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+        />
+        <meta property="description" content="This is Test WebSite" />
+        <link rel="shortcut icon" href="/favicon.ico" />
+      </Head>
+      <body>
+        <Main />
+        <NextScript />
+      </body>
+    </Html>
+  );
+}
+
+
+// pages/index.tsx
+// 페이지별로 다른 title tag를 사용하는 예시.
+// 해당 페이지로 진입하면 웹사이트의 타이틀이 변경됩니다.
+import React from "react";
+import Head from "next/head";
+
+export default function Home() {
+  return (
+    <>
+      <Head>
+        <title>title change test</title>
+      </Head>
+      <p>SEO!!</p>
+    </>
+  );
+}
+
+
+```
+
+### 2. 페이지 로딩 속도 최적화
+
+페이지 로딩 속도는 검색 엔진의 검색 순위에도 영향을 줄 수 있습니다. 따라서 SEO를 위해 페이지 로딩 속도를 최적화하는 것이 좋습니다. 이를 위해 리소스를 압축하거나 CDN을 사용하거나 캐시를 설정하는 등의 방법이 있습니다. 다행히도 Next.js는 기본적으로 캐싱을 지원하고, 내장 `Image`, `Font`, `Script` 컴포넌트를 통해 리소스를 최적화하는 방법을 제공합니다.
+
+#### 1) 이미지 최적화
+
+`Image` 컴포넌트는 사용자 기기에 맞게 리소스 최적화, lazy loading, 레이아웃 오류 방지 등의 기능을 제공합니다.
+
+```jsx
+// image-optimization.tsx
+import React from "react";
+import Image from "next/image";
+import TestLogo from "public/images/test-logo.png";
+
+export async function getServerSideProps(ctx: any) {
+  return {
+    props: {},
+  };
+}
+
+export default function ImageTest() {
+  return (
+    <>
+      <Image
+        src={TestLogo}
+        alt="Test Logo"
+        // width={500} automatically provided
+        // height={500} automatically provided
+        // blurDataURL="data:..." automatically provided
+        placeholder="blur" // Optional blur-up while loading
+      />
+    </>
+  );
+}
+
+```
+
+#### 2) 폰트 최적화
+
+`Font` 컴포넌트는 별도의 외부 네트워크 요청 없이 글꼴을 자동으로 최적화하는 기능을 제공합니다. Google에서 제공하는 기본 font뿐만 아니라 local에 저장된 사용자 폰트도 최적화를 지원합니다.
+
+```jsx
+// font-optimization.tsx
+import React from "react";
+import localFont from "@next/font/local";
+import { JetBrains_Mono as MonoFont } from "@next/font/google";
+
+const fontSans = localFont({
+  variable: "--font-sans",
+  src: [
+    {
+      path: "../../public/assets/fonts/NotoSansKR-Black.otf",
+      style: "normal",
+      weight: "400",
+    },
+  ],
+});
+
+const monoFont = MonoFont({
+  subsets: ["latin"],
+  variable: "--font-mono",
+  style: "normal",
+});
+
+export async function getServerSideProps(ctx: any) {
+  return {
+    props: {},
+  };
+}
+
+export default function FontTest() {
+  return (
+    <>
+      <p style={{ fontFamily: fontSans.style.fontFamily }}>
+        font 1 - NotoSansKR-Black
+      </p>
+      <p style={{ fontFamily: monoFont.style.fontFamily }}>
+        font 2 - JetBrains_Mono
+      </p>
+    </>
+  );
+}
+```
+
+#### 3) Script 최적화
+
+필요한 곳에서만 특정 script 파일을 불러오려면 `Script` 컴포넌트를 사용하시면 됩니다. 아래 예제는 페이지에 진입할 때 자동으로 alert가 호출되는 예시입니다.
+
+```jsx
+// script-optimization.tsx
+import React from "react";
+import Script from "next/script";
+
+export async function getServerSideProps(ctx: any) {
+  return {
+    props: {},
+  };
+}
+
+export default function ScriptTest() {
+  return (
+    <>
+      <p>Script Test</p>
+      <Script src="scripts/test-script.js" />
+    </>
+  );
+}
+
+
+// script.js
+function showAlert() {
+  alert("hello world");
+}
+
+// 스크립트가 로드되면 얼럿 호출
+showAlert();
+```
+
+### 3. URL 최적화
+
+Google은 SEO를 위해 간단하고 명료한 URL 사용을 권장합니다. 아래 URL들은 구글이 제시한 좋은 예시입니다.
+
+- 1. URL에 간단하면서 구체적인 단어를 사용할 것
+     https://en.wikipedia.org/wiki/Aviation
+- 2. URL에 현지화된 단어를 사용할 것
+     https://www.example.com/lebensmittel/pfefferminz
+- 3. 필요에 따라서는 UTF-8 인코딩을 사용할 것(아래의 주소는 중국어를 인코딩한 것)
+     https://www.example.com/%D9%86%D8%B9%D9%86%D8%A7%D8%B9/%D8%A8%D9%82%D8%A7%D9%84%D8%A9
+- 4. 밑줄(\_) 대신 하이픈(-)을 사용할 것
+     https://www.example.com/summer-clothing/filter?color-profile=dark-grey
+
+### 4. a 태그에 올바른 href 지정
+
+Google은 웹사이트 내부 링크를 따라 다른 페이지를 크롤링합니다. 따라서 내부 링크를 통해 검색 엔진이 사이트 구조를 쉽게 따라갈 수 있도록 만드는 것도 중요합니다.
+
+![이미지2](/images/posts/nextjs-seo/image2.png)
+
+구글 크롤러는 기본적으로 올바른 `href` 속성이 포함된 `a` 태그를 추적할 수 있습니다. Next.js에서는 라우팅을 위해 `a` 태그 대신 `Link` 컴포넌트 사용을 권장합니다. `Link`는 컴파일 시 `a` 태그로 변환되며 `href`를 지정하지만, `Link` 내부를 커스텀하는 방식에 따라 `a` 태그의 `href`가 비어 보일 수 있는 경우도 있습니다.
+
+```jsx
+import React from "react";
+import Link from "next/link";
+import styled from "styled-components";
+
+export async function getServerSideProps(ctx: any) {
+  return {
+    props: {},
+  };
+}
+
+export default function LinkTest() {
+  return (
+    <>
+      <Link href="/image-optimization">Image Optimization</Link>
+      <Link href="/script-optimization">Script Optimization</Link>
+      <Link href="/font-optimization" passHref legacyBehavior>
+        <StyledLink>Font Optimization</StyledLink>
+      </Link>
+    </>
+  );
+}
+
+const StyledLink = styled.a`
+  color: red;
+`;
+
+```
+
+이를 방지하려면 `Link` 컴포넌트의 `passHref` 속성을 추가하면 `Link` 내부의 `a` 태그에 `href`가 전달됩니다. 왼쪽은 `passHref` 사용 전, 오른쪽은 사용 후 결과입니다.
+
+![이미지3](/images/posts/nextjs-seo/image3.png)
+
+## 샘플 코드
+
+[github 저장소 이동](https://github.com/MochaChoco/seo-test)
+
+## 참고 자료
+
+- [Google 검색센터](https://developers.google.com/search/docs?hl=ko)
+- [Next.js, SEO 최적화](https://velog.io/@singsoong/Next.js-SEO-%EC%B5%9C%EC%A0%81%ED%99%94)
+- [Next.js 환경에서 SSR을 활용하여 SEO 처리하기](https://www.chanstory.dev/blog/post/4)

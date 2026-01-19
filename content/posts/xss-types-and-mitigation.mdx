@@ -1,0 +1,181 @@
+---
+title: "XSS 공격의 유형과 대처방법"
+description: "Reflected/Stored/DOM-based XSS의 개념과 동작 방식, 그리고 sanitize-html로 입력/출력을 정화(sanitize)해 방어하는 방법을 정리합니다."
+date: "2023-09-11"
+tags: ["security", "xss", "frontend", "vue"]
+slug: "xss-types-and-mitigation"
+coverImage: "/images/posts/xss-types-and-mitigation/cover.png"
+---
+
+![커버 이미지](/images/posts/xss-types-and-mitigation/cover.png)
+
+사내에서 진행 중인 프로젝트마다 취약성 검사를 진행하는데, 저희 팀에서 구축 중인 웹사이트가 XSS 공격에 취약하다는 진단을 받았습니다. XSS라는 단어는 개발을 하면서 어디선가 들어본 적은 있었지만, 정확히 무엇이고 어떻게 대처해야 하는지는 잘 모르고 있었습니다. 그래서 XSS가 무엇인지와 대응 방법을 정리한 뒤, 진행 중인 프로젝트에 적용하기로 했습니다.
+
+## XSS란?
+
+`XSS`는 `Cross Site Scripting`의 약자로, 웹사이트에 악성 스크립트를 주입하는 공격을 의미합니다. 공격자는 웹사이트의 입력 또는 출력 지점에 스크립트를 심어, 웹사이트뿐만 아니라 다른 사용자(세션 탈취 등)를 공격할 수 있습니다. XSS는 대표적으로 Reflected XSS, Stored XSS, DOM-based XSS 세 가지 유형으로 나뉩니다.
+
+### 1. Reflected XSS
+
+가장 일반적인 XSS 유형으로, 공격자가 입력한 스크립트가 즉시 반영되는 형태의 공격을 의미합니다. 공격자의 입력 값이 HTTP 응답에 그대로 포함되어 공격자에게 다시 “반사(Reflected)”되는 것처럼 보인다는 의미에서 붙은 이름입니다. 주로 주소창이나 간단한 입력 영역을 통해 스크립트를 삽입하는 방식으로 공격이 이루어집니다.
+
+Vue를 이용해 Reflected XSS를 재현해보겠습니다. 아래 코드는 `script`라는 query 값을 입력받아 화면에 출력하는 예시입니다.
+
+```jsx
+// Reflected XSS
+<script setup lang="ts">
+import { useRoute } from 'vue-router';
+
+const route = useRoute();
+
+const script = route?.query?.script ?? '';
+</script>
+
+<template>
+  <div>
+    <div id="target"> {{ script }}</div>		// 문자열로 변환되어 출력
+  </div>
+</template>
+```
+
+query에 단순 문자열이 아니라 태그나 스크립트를 입력하더라도, 위 예시처럼 일반 템플릿 바인딩은 문자열로 처리되어 그대로 출력됩니다. 다만 출력된 내용을 안전하지 않은 방식으로 다시 실행(예: `eval` 등)한다면 문제가 될 수 있습니다.
+
+![이미지1](/images/posts/xss-types-and-mitigation/image1.png)
+
+주소창에 query로 `script=alert('attack')`를 입력한 후, 개발자 콘솔에서 `eval(document.getElementById("target").innerHTML)`을 실행하면 alert가 뜨는 것을 확인할 수 있습니다. 이처럼 Reflected XSS는 입력과 동시에 결과가 즉각적으로 나타나는 특징이 있습니다.
+
+### 2. Stored XSS
+
+스크립트가 서버의 데이터베이스에 저장(Stored)되는 형태의 공격을 의미합니다. 데이터베이스에 저장된 스크립트는 일회성이 아니라 지속적으로 실행될 수 있기 때문에 XSS 공격 중에서도 특히 위험한 유형에 속합니다.
+
+게시판처럼 사용자 입력을 서버에 저장해두고, 저장된 내용을 다시 사용자에게 출력하는 곳에서 주로 발생합니다. 공격자가 입력 단계에서 스크립트를 삽입해 서버에 저장해두면, 다른 사용자가 해당 콘텐츠를 열람할 때 스크립트가 실행되어 정보 유출이나 추가 공격으로 이어질 수 있습니다.
+
+Stored XSS를 재현하는 코드는 아래와 같습니다. 게시판에 글을 쓰면 해당 글이 서버에 string 형태로 저장되고, 다른 사람이 해당 글을 읽을 때 서버에 저장되어 있던 글을 client-side에 string 형태로 내려준다고 가정하겠습니다.
+
+```jsx
+// Stored XSS
+<script setup lang="ts">
+import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+
+const router = useRouter();
+const tagString = ref('');
+
+const loadData = () => {
+  tagString.value = `
+  <img src="/assets/computer-virus.png" onload="window.addEventListener('popstate', function () {
+      alert('url changed');
+  });" />
+  <p>이제 뒤로가기 버튼을 누를때마다 팝업창이 뜹니다.</p>
+  `;
+};
+
+onMounted(()=>{
+  loadData();
+});
+</script>
+
+<template>
+  <div>
+    <div class="inner" v-html="tagString"></div>
+    <button @click="loadData">그림 출력</button>
+    <router-link to=""><div @click="router.go(-1)">go back</div></router-link>
+  </div>
+</template>
+```
+
+코드를 자세히 보면 문자열 안의 `img` 태그에 `onload` 콜백이 지정되어 있습니다. 이미지 로드가 완료되면 `window.addEventListener`를 등록해, 뒤로 가기를 할 때마다 alert가 뜨도록 동작하게 됩니다. 따라서 해당 게시글을 읽은 사용자는 사이트에 머무르는 동안 뒤로가기 버튼을 누를 때마다 alert가 계속 뜨게 됩니다.
+
+![이미지2](/images/posts/xss-types-and-mitigation/image2.png)
+
+이처럼 Stored XSS는 게시판처럼 공격자가 HTML을 직접 입력할 수 있고, 그 결과가 그대로 렌더링되는 환경에서 주로 발생합니다.
+
+### 3. DOM based XSS
+
+공격자가 악성 스크립트가 담긴 DOM을 작성 또는 수정한 후, 다른 사용자가 해당 페이지를 열었을 때 실행되도록 만드는 공격입니다. page 파일 원본 소스는 변경되지 않지만, client-side에서 생성된 DOM을 직접 조작해 공격이 일어납니다. DOM-based XSS는 Reflected XSS 또는 Stored XSS의 형태로도 나타날 수 있습니다.
+
+## 대처방안
+
+query로 직접 DOM을 제어하지 않도록 하고, 사용자로부터 입력받는 지점과 출력하는 지점에서 코드를 `sanitize`(정화)하는 것이 중요합니다. 정규식으로 걸러내거나 별도 로직을 구현하는 방법도 있지만, 검증된 sanitize 라이브러리를 사용하는 편이 상대적으로 안전합니다.
+
+> #### Sanitize란?
+>
+> Sanitize는 영어로 소독이라는 뜻이며, 의미 그대로 입력/출력 데이터를 “정화”한다는 의미로 사용됩니다. 사용자가 tag나 script를 입력하지 못하게 막거나, 입력되더라도 입출력 시 sanitize 처리를 통해 공격에 사용될 수 있는 요소를 걸러내야 합니다.
+
+이 글에서는 [sanitize-html](https://www.npmjs.com/package/sanitize-html) 라이브러리로 코드를 sanitize하는 방법을 예시로 설명하겠습니다.
+
+### 1. Query를 sanitize
+
+```jsx
+// Reflected XSS
+<script setup lang="ts">
+import { useRoute, useRouter } from 'vue-router';
+import sanitizeHtml from 'sanitize-html';
+
+const route = useRoute();
+const router = useRouter();
+
+// query를 sanitize
+const script = sanitizeHtml(route?.query?.script) ?? '';
+</script>
+
+<template>
+  <div>
+    <div id="target">Your script is : {{ script }}</div>
+    <router-link to=""><div @click="router.go(-1)">go back</div></router-link>
+  </div>
+</template>
+
+```
+
+Reflected XSS 예제에서는 query를 받는 부분을 `sanitizeHtml()`로 감싸 sanitize합니다. 코드를 적용하면 URL query에 태그를 입력하더라도 정화되어 출력되는 것을 확인할 수 있습니다.
+
+![이미지3](/images/posts/xss-types-and-mitigation/image3.png)
+
+### 2. DOM을 sanitize
+
+Stored XSS 예제에서는 `tagString` 문자열을 `sanitizeHtml()`로 감쌉니다. 여기서는 태그는 허용하되 이벤트 핸들러 같은 위험 요소를 제거하는 것이 목적이므로, 옵션으로 `allowedTags: false`를 사용했습니다.
+
+```jsx
+// Stored XSS
+<script setup lang="ts">
+import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+import sanitizeHtml from 'sanitize-html';
+
+const router = useRouter();
+let tagString = ref('');
+
+const loadData = () => {
+  tagString.value = sanitizeHtml(
+    `
+  <img src="/assets/computer-virus.png" onload="window.addEventListener('popstate', function () {
+      alert('url changed');
+  });" />
+  <p>이제 뒤로가기 버튼을 누를때마다 팝업창이 뜹니다.</p>
+  `,
+    {
+      allowedTags: false, // 모든 태그 허용
+    },
+  );
+};
+</script>
+
+<template>
+  <div>
+    <div class="inner" v-html="tagString"></div>
+    <button @click="loadData">그림 출력</button>
+    <router-link to=""><div @click="router.go(-1)">go back</div></router-link>
+  </div>
+</template>
+```
+
+왼쪽이 sanitize 전, 오른쪽이 sanitize 후 모습입니다. `img` 태그는 유지되지만 `onload` attribute는 제거된 것을 확인할 수 있습니다.
+
+![이미지4](/images/posts/xss-types-and-mitigation/image4.png)
+
+## 참고 자료
+
+- [XSS(Cross Site Scripting) 공격이란?](https://4rgos.tistory.com/1)
+- [Reflected XSS(반사된 XSS)](https://www.bugbountyclub.com/pentestgym/view/44)
+- [DOM 기반 XSS(DOM based Cross Site Scripting) 공격과 방어](https://junhyunny.github.io/information/security/dom-based-cross-site-scripting/)

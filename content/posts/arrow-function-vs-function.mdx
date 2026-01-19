@@ -1,0 +1,268 @@
+---
+title: "화살표 함수의 특징과 일반 함수와의 차이점"
+description: "화살표 함수(Arrow Function)의 문법과 this/arguments/constructor/prototype/yield 등 일반 함수와의 핵심 차이점을 예제와 함께 정리합니다."
+date: "2023-10-01"
+tags: ["javascript", "function"]
+slug: "arrow-function-vs-function"
+coverImage: "/images/posts/arrow-function-vs-function/cover.jpg"
+---
+
+![커버 이미지](/images/posts/arrow-function-vs-function/cover.jpg)
+
+> ##### "지나친 것은 모자란 것과 같다." - 과유불급
+
+그동안 화살표 함수를 표기가 간단하다는 이유로 일반 함수 표현식 대신 자주 사용해왔는데, 특정 상황에서 화살표 함수가 일반 함수와 다르게 동작한다는 피드백을 받았습니다.
+특징을 알고 적절하게 사용한다면 더 좋은 코드를 작성할 수 있을 것이라 생각하여, 이번 포스트에서는 화살표 함수의 특징과 일반 함수와의 차이점을 정리해보겠습니다.
+
+## 화살표 함수란?
+
+화살표 함수(`Arrow function`)는 ES6에 도입된 문법으로, 전통적인 함수 표현을 더 간단하게 작성하기 위해 등장했습니다.
+
+기존에는 함수를 만들 때 아래처럼 `function` 키워드를 사용했습니다.
+
+```javascript
+// 기존 코드 작성 방식
+function sum(a, b) {
+  return a + b;
+}
+
+// 화살표 함수
+const sum = (a, b) => {
+  return a + b;
+};
+
+// 만일 화살표 함수가 리턴문 한 줄만 가지고 있다면 중괄호({})를 생략할 수 있다.
+const sum = (a, b) => a + b;
+```
+
+이처럼 화살표 함수는 `function` 키워드 대신 `=>`를 사용하여 보다 간단하게 코드를 작성할 수 있습니다.
+
+### 1. 화살표 함수의 문법 표현
+
+화살표 함수를 표현하는 방식은 크게 아래처럼 분류할 수 있습니다.
+
+#### 1) 매개변수 표현
+
+```javascript
+// 매개변수가 없을 경우, 소괄호 생략 불가
+() => {
+  return true;
+};
+
+// 매개변수가 한 개인 경우, 소괄호 생략 가능
+(x) => {
+  return x;
+};
+
+// 매개변수가 여러 개인 경우, 소괄호 생략 불가
+(x, y) => {
+  return x + y;
+};
+```
+
+#### 2) 함수 몸체 표현
+
+함수 몸체의 코드가 한 줄이고 단순히 return문 밖에 없다면 중괄호({})와 return 키워드를 생략할 수 있다.
+
+```javascript
+(x) => {
+  return x * x;
+};
+
+// 함수 몸체가 한줄의 구문이라면 중괄호를 생략할 수 있다.
+(x) => x * x;
+```
+
+#### 3) 객체 리터럴 반환
+
+객체 리터럴은 아래 코드처럼 `key: value` 형태로 데이터를 직접 작성하는 방식을 의미합니다.
+
+```javascript
+const person = {
+  name: "Kim",
+};
+```
+
+함수 블록의 중괄호와 객체 리터럴의 중괄호는 형태가 같아 파서가 혼동할 수 있습니다. 따라서 화살표 함수에서 객체 리터럴을 반환하려면 소괄호 `()`로 감싸주셔야 합니다.
+
+```javascript
+() => {
+  return { name: "Kim" };
+};
+
+() => ({ name: "Kim" }); // 함수 몸통을 소괄호로 감싼다.
+```
+
+### 2. 화살표 함수의 호출 방법
+
+화살표 함수는 함수 선언문 형태로는 사용할 수 없고, 함수 표현식(변수에 할당) 형태로 사용합니다. 따라서 아래처럼 변수로 선언한 뒤 호출합니다.
+
+```javascript
+// 일반적인 호출
+const pow = (x) => x * x;
+console.log(pow(10)); // 100
+
+// 콜백 함수에 사용할 때
+const arr = [1, 2, 3];
+const pow = arr.map((x) => x * x);
+console.log(pow); // [ 1, 4, 9 ]
+```
+
+## 화살표 함수의 특징
+
+화살표 함수는 간결하게 표현할 수 있다는 장점이 있지만, 일반 함수와는 다른 고유한 특징도 함께 가지고 있습니다. 따라서 아래의 특징들을 이해한 뒤 상황에 맞게 사용하시는 것이 좋습니다.
+
+### 1. 화살표 함수 내부의 this 키워드는 상위 스코프를 가리킨다.
+
+일반적으로 JavaScript에서는 함수를 호출할 때 **어떻게 호출되었는지에 따라 `this` 바인딩이 동적으로 결정**됩니다. 하지만 **화살표 함수의 `this`는 항상 상위 스코프의 `this`를 그대로 캡처**합니다.
+따라서 `addEventListener`의 콜백으로 사용하더라도 별도로 바인딩된 요소를 가리키지 않을 수 있으며, `apply`/`call`/`bind`로 `this`를 바꾸는 것도 기대대로 동작하지 않습니다.
+
+##### ※ this 키워드에 관한 내용은 [이전 포스트](https://velog.io/@swj9077/this-%ED%82%A4%EC%9B%8C%EB%93%9C)에 정리해놓았으니 참고바랍니다.
+
+```javascript
+var firstName = "Kim";
+var lastName = "Jinsu";
+
+let user = {
+  firstName: "Park",
+  lastName: "Minji",
+  showName: function () {
+    function showFullName() {
+      console.log(this.firstName + " " + this.lastName); // Kim Jinsu
+    }
+
+    const showFullName = () => {
+      console.log(this.firstName + " " + this.lastName); // Park Minji
+    };
+
+    showFullName();
+  },
+};
+
+user.showName();
+```
+
+위 예제는 `user`의 성과 이름을 출력하는 예제입니다.
+일반 함수로 선언된 내부 함수 `showFullName`은 호출 방식에 따라 `this`가 전역 객체를 가리킬 수 있어 `"Kim Jinsu"`가 출력됩니다. 반면 화살표 함수로 바꾸면 `this`가 상위 스코프(여기서는 `user.showName`의 `this`)를 가리키므로 `"Park Minji"`가 출력됩니다.
+
+### 2. 화살표 함수는 arguments 속성을 지원하지 않는다.
+
+`arguments`는 일반 함수가 호출될 때 전달된 인자들을 담고 있는 유사 배열 객체입니다.
+
+```javascript
+function func() {
+  console.log(arguments);
+}
+
+func(1, 2, 3); // [1, 2, 3]
+```
+
+일반 함수 내부에서 `arguments`를 출력하면 인자들이 배열처럼 출력되는 것을 확인할 수 있습니다. 하지만 화살표 함수는 `arguments`를 지원하지 않기 때문에 아래 예제는 오류가 발생합니다.
+
+```javascript
+const func = () => {
+  console.log(arguments);
+};
+
+func(1, 2, 3); // Error: arguments is not defined
+```
+
+대신 화살표 함수에서는 rest parameter(`...rest`)를 사용해 인자를 배열 형태로 받을 수 있습니다.
+
+```javascript
+// rest parameter를 사용하면 파라미터를 배열 형태로 출력할 수 있다.
+const func = (...rest) => {
+  console.log(rest);
+};
+
+func(1, 2, 3); // [1, 2, 3]
+```
+
+### 3. 화살표 함수는 생성자 함수로 사용할 수 없다.
+
+생성자 함수는 `new` 키워드를 통해 객체를 생성하는 함수입니다. 아래 예제는 이름을 입력받아 `Person` 객체를 생성합니다.
+
+```javascript
+function Person(name) {
+  this.name = name;
+}
+
+const person = new Person("Kim");
+
+console.log(person.name); // Kim
+```
+
+화살표 함수는 생성자로 사용할 수 없으며, `new`와 함께 사용하면 오류가 발생합니다.
+
+```javascript
+const Person = (name) => {
+  this.name = name;
+};
+
+const person = new Person("Kim"); // Error: Person is not a constructor
+
+console.log(person.name);
+```
+
+### 4. 화살표 함수는 prototype 속성을 지원하지 않는다.
+
+ES6에서 `class` 문법이 도입되었지만, JavaScript는 기본적으로 prototype 기반 언어입니다. 그래서 상속을 위해 `prototype`을 사용합니다.
+
+> #### prototype이란?
+>
+> 기본적으로 JavaScript의 모든 객체는 부모 객체로부터 property와 method를 상속받습니다. 이때 상속되는 정보를 제공하는 객체를 프로토타입(prototype)이라고 합니다.
+
+하지만 화살표 함수는 객체를 생성할 수 없으므로 `prototype` 속성도 지원하지 않습니다.
+
+```javascript
+function Person(name) {
+  this.name = name;
+}
+
+console.log(Person.prototype); // { constructor: ƒ }
+
+// -------------------------------------------------- //
+
+const Person = (name) => {
+  this.name = name;
+};
+
+console.log(Person.prototype); // undefined
+```
+
+### 5. 화살표 함수는 yield 속성을 지원하지 않는다.
+
+`yield`는 생성기 함수(`function*`)를 특정 지점에서 일시 중지하고, `next()`로 해당 지점부터 다시 실행할 수 있게 해주는 키워드입니다. 아래 예제는 `showNumber`를 여러 번 호출해 값을 출력합니다.
+
+```javascript
+function* showNumber() {
+  yield 1;
+  yield 2;
+  yield 3;
+}
+
+let num = showNumber();
+
+console.log(num.next()); // { "value": 1, "done": false }
+console.log(num.next()); // { "value": 2, "done": false }
+console.log(num.next()); // { "value": 3, "done": false }
+console.log(num.next()); // { "value": undefined, "done": true }
+```
+
+하지만 화살표 함수는 생성기 함수 문법 자체를 사용할 수 없으므로 `yield` 키워드도 사용할 수 없습니다.
+
+```javascript
+// 올바르지 않은 문법
+const showNumber = *() => { // Error: Unexpected token '*'
+    yield 1;
+    yield 2;
+    yield 3;
+}
+```
+
+## 참고 문서
+
+- [화살표 함수 - Javascript | MDN](https://developer.mozilla.org/ko/docs/Web/JavaScript/Reference/Functions/Arrow_functions)
+- [Arrow function | PoiemaWeb](https://poiemaweb.com/es6-arrow-function)
+- [유용하지만 위험한 화살표 함수](https://joooing.tistory.com/entry/%EC%9C%A0%EC%9A%A9%ED%95%98%EC%A7%80%EB%A7%8C-%EC%9C%84%ED%97%98%ED%95%9C-%ED%99%94%EC%82%B4%ED%91%9C%ED%95%A8%EC%88%98)
+- [자바스크립트 화살표 함수 사용법 총정리](https://inpa.tistory.com/entry/JS-%F0%9F%93%9A-%EC%9E%90%EB%B0%94%EC%8A%A4%ED%81%AC%EB%A6%BD%ED%8A%B8-%ED%99%94%EC%82%B4%ED%91%9C-%ED%95%A8%EC%88%98-%EC%A0%95%EB%A6%AC#%ED%99%94%EC%82%B4%ED%91%9C_%ED%95%A8%EC%88%98_%EB%AC%B8%EB%B2%95_%ED%91%9C%ED%98%84)

@@ -9,55 +9,88 @@ coverImage: "/images/posts/nextjs-github-pages-deploy-debugging/cover.png"
 
 ![커버 이미지](/images/posts/nextjs-github-pages-deploy-debugging/cover.png)
 
-## 배경: GitHub Pages + Next.js 조합의 현실
+## 배경
 
-Next.js는 SSR, ISR, SSG 등 다양한 렌더링 전략을 제공하지만,
-GitHub Pages는 정적 파일만 호스팅할 수 있습니다.
-그래서 결국 `output: "export"` 기반의 **정적 내보내기**가 필요합니다.
+Next.js 앱을 GitHub Pages에 배포하면서, 로컬 개발은 `/`에서 유지하고 배포는 `/blog` basePath로 내보내는 구성을 만들었습니다.  
+그 과정에서 `out/` 누락, 이미지 404, 설정 덮어쓰기 같은 문제를 한 번에 겪었습니다.
 
-문제는 여기서 시작됩니다.
+### 왜 GitHub Pages는 `/`로 배포가 안 되나
 
-- 로컬에서는 `next dev`로 잘 보이는데,
-- Actions에서는 `out/`이 없다고 실패하고,
-- `basePath` 때문에 이미지가 사라지고,
-- 심지어 `next.config.js`가 CI에서만 생성되는 상황까지 마주했습니다.
+GitHub Pages는 크게 두 가지 형태가 있습니다.
 
-이 글은 그 과정을 시간순으로 정리한 기록입니다.
+- **User/Organization Pages**: 저장소 이름이 `username.github.io`인 경우, 사이트 루트가 `https://username.github.io/`라서 경로가 `/`입니다.
+- **Project Pages**: 일반 저장소(예: `blog`)를 Pages로 올리면, 사이트가 `https://username.github.io/blog/` 형태가 되어 **리포지토리 이름이 기본 경로**가 됩니다.
 
-## 증상 1: `out/`이 없어서 `.nojekyll` 생성 실패
+저는 두 번째(Project Pages) 방식이라서 배포된 사이트의 루트가 `/`가 아니라 `/blog`가 됩니다.  
+그래서 Next.js에서도 `basePath: "/blog"`(그리고 정적 자산을 위해 `assetPrefix`) 같은 설정이 필요했고, 이 지점이 로컬(`/`)과 충돌하는 출발점이었습니다.
 
-GitHub Actions 에러는 단순했습니다.
+## 왜 이런 문제가 발생했나
+
+이번 이슈는 “한 가지 버그”가 아니라, **정적 호스팅(GitHub Pages)과 Next.js의 특성이 맞물린 결과**였습니다. 핵심만 추려보면 다음 세 덩어리로 정리됩니다.
+
+### 1) GitHub Pages는 정적 파일만 올릴 수 있다
+
+GitHub Pages는 서버가 없습니다. 즉, SSR/미들웨어/동적 라우팅 같은 서버 기능은 배포 환경에서 그대로 쓸 수 없습니다.  
+그래서 배포 단계에서는 결국 Next.js의 정적 내보내기(`output: "export"`)를 써야 합니다.
+
+여기까지는 흔한 이야기인데, 문제는 **로컬 dev와 배포 export를 같은 코드베이스로 운영할 때** 생깁니다.
+
+- 로컬: `next dev`로 `/`에서 개발하고 싶다
+- 배포: `/blog` 아래로 정적 export가 되어야 한다
+
+이 둘은 설정 관점에서 충돌합니다. `basePath`가 대표적입니다.
+
+### 2) export가 켜지지 않으면 `out/`이 생성되지 않는다
+
+워크플로우에서 `.nojekyll`을 만들려는 스텝이 실패했습니다.
 
 ```
-Run touch ./out/.nojekyll
 touch: cannot touch './out/.nojekyll': No such file or directory
 ```
 
-즉, `out/` 디렉터리가 생성되지 않았습니다.
+이건 “파일이 없네?”가 아니라 “**export 결과물(out)이 안 만들어졌다**”는 신호입니다.  
+즉, 빌드가 `output: "export"`로 동작하지 않았다는 뜻입니다.
 
-원인을 추적해보니, Actions에서 실행한 build는
-정적 export 모드가 아니었습니다.
+저는 `next.config.ts`에서 export 모드를 조건부로 켜고 있었는데, CI에서 그 조건이 기대대로 적용되지 않으면서 `out/`이 안 생겼습니다.
 
-### 핵심 원인
+### 3) basePath 하드코딩은 로컬에서 바로 404로 돌아온다
 
-- `next.config.ts`에서 export 모드를 조건부로 켜고 있었음
-- 그런데 Actions에서는 해당 환경 변수가 전달되지 않았음
-- 결과적으로 `next build`가 일반 빌드로 동작
+처음엔 MDX/컴포넌트에서 이미지 경로를 `/blog/images/...`처럼 하드코딩해뒀습니다. 배포에선 맞는 경로지만, 로컬은 basePath가 없으니 `/blog/...`가 전부 404가 됩니다.  
+“로컬에서 이미지가 다 안 보여요”라는 증상이 여기서 나왔습니다.
 
-### 해결 방향
+### 4) `actions/configure-pages`가 `next.config.js`를 생성한다
 
-정적 export 모드가 확실히 켜지도록 해야 합니다.
+이번 트러블슈팅에서 제일 헷갈렸던 포인트입니다.
 
-아래 중 하나가 필요합니다.
+로컬에는 `next.config.js`가 없는데, GitHub Actions 로그에선 계속 `next.config.js`가 보였습니다.  
+디버그로 생성 시점을 찍어보니 결론은 명확했습니다.
 
-1. `next.config.ts`에서 Actions 환경을 감지
-2. `npm run build` 대신 export 전용 스크립트 사용
+- checkout 직후: `next.config.js` 없음
+- **Setup Pages 이후: `next.config.js` 생성**
 
-## 설정 전환: export 모드는 빌드 시점에만 활성화
+그리고 생성된 파일은 이렇게 “Default Pages configuration for Next”라는 헤더를 달고 있었습니다.
 
-로컬 개발은 `/`에서 돌아가야 하고,
-배포는 `/my-site` basePath를 사용해야 했습니다.
-그래서 **조건부 설정**으로 정리했습니다.
+```js
+// Default Pages configuration for Next
+const nextConfig = {
+  images: { unoptimized: true },
+  experimental: { images: { unoptimized: true } },
+  basePath: "/blog",
+};
+module.exports = nextConfig;
+```
+
+문제는 Next가 `next.config.js`를 우선으로 읽는다는 점입니다.  
+즉, `next.config.ts`를 아무리 잘 만들어도, 이 파일이 생기는 순간 설정이 덮어써지고 “왜 내 설정이 적용이 안 되지?”라는 상황이 됩니다.
+
+## 왜 이렇게 해결했나
+
+해결 전략은 단순했습니다. “환경에 따라 달라져야 하는 것”을 분리하고, “덮어쓰기 당할 수 있는 지점”을 제거하는 방식입니다.
+
+### 1) 로컬과 배포 설정을 조건부로 분리했다
+
+로컬은 `/`에서 개발해야 하고, 배포는 `/blog`로 나가야 합니다.  
+그래서 `next.config.ts`를 export 여부로 갈라지도록 정리했습니다.
 
 ```ts
 import type { NextConfig } from "next";
@@ -69,52 +102,44 @@ const isExport =
 
 const nextConfig: NextConfig = {
   output: isExport ? "export" : undefined,
-  basePath: isExport ? "/my-site" : "",
-  assetPrefix: isExport ? "/my-site" : "",
+  basePath: isExport ? "/blog" : "",
+  assetPrefix: isExport ? "/blog" : "",
   trailingSlash: isExport,
   images: {
     unoptimized: isExport,
   },
   env: {
-    NEXT_PUBLIC_BASE_PATH: isExport ? "/my-site" : "",
+    NEXT_PUBLIC_BASE_PATH: isExport ? "/blog" : "",
   },
 };
 
 export default nextConfig;
 ```
 
-이렇게 하면:
+이렇게 해두면:
 
-- 로컬 `next dev`는 `/`에서 정상
-- Actions export 빌드는 `/my-site` 경로로 정적 파일 생성
+- 로컬 `npm run dev`는 항상 `/`에서 동작
+- Actions의 export 빌드는 `/blog` 기준으로 정적 파일을 만든다
 
-## 증상 2: 로컬에서 이미지가 모두 404
+### 2) 이미지 경로는 `/images/...`로 통일하고, 필요할 때만 basePath를 붙였다
 
-이전에는 `/my-site/images/...` 같은 경로를 MDX에 직접 넣었습니다.
-하지만 로컬에서는 `basePath`가 비활성화되기 때문에
-`/my-site/...`는 존재하지 않는 경로가 됩니다.
-
-### 해결 방향
-
-이미지 경로는 항상 `/images/...` 형태로 통일하고,
-export 모드에서만 basePath를 붙이는 구조로 바꾸었습니다.
+컨텐츠나 컴포넌트에서 `/blog`를 직접 쓰는 순간, 로컬과 배포 중 한쪽이 반드시 깨집니다.  
+그래서 “작성자는 `/images/...`만 쓰고, 시스템이 알아서 basePath를 붙이자”로 룰을 바꿨습니다.
 
 ```ts
 // lib/base-path.ts
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
-export const basePath = BASE_PATH;
-
 export const withBasePath = (path: string) => {
-  if (!path) return basePath || "";
+  if (!path) return BASE_PATH || "";
   if (/^https?:\/\//i.test(path)) return path;
-  if (basePath && path.startsWith(basePath)) return path;
-  if (basePath && path.startsWith("/")) return `${basePath}${path}`;
+  if (BASE_PATH && path.startsWith(BASE_PATH)) return path;
+  if (BASE_PATH && path.startsWith("/")) return `${BASE_PATH}${path}`;
   return path;
 };
 ```
 
-그리고 컴포넌트에서는 이렇게 사용했습니다.
+그리고 컴포넌트에서는 아래처럼만 사용합니다.
 
 ```tsx
 const defaultCover = withBasePath("/images/default-blog-cover.png");
@@ -123,62 +148,38 @@ const coverImage = post.frontmatter.coverImage
   : defaultCover;
 ```
 
-MDX에서도 `/my-site` 하드코딩을 제거했습니다.
+MDX도 `/images/...`로 통일했습니다.
 
 ```
 ![커버 이미지](/images/posts/xxx/cover.png)
 ```
 
-## 증상 3: 미들웨어 로그가 한 줄도 안 찍힘
+### 3) export 빌드를 “스크립트”로 고정해서 실수를 줄였다
 
-로컬에서 `npm run dev`를 실행했는데도,
-미들웨어 로그가 찍히지 않았습니다.
+CI에서 `NEXT_PUBLIC_EXPORT=true`를 매번 env로 흩뿌리는 것보다, 스크립트로 묶어두는 편이 실수가 줄었습니다.
 
-원인을 정리하면 다음과 같습니다.
-
-- `output: "export"`는 미들웨어를 비활성화합니다.
-- `basePath` 때문에 `/` 요청이 Next에 도달하지 못하는 경우가 있습니다.
-- 그리고 무엇보다 **next.config.js가 우선 로딩**되면
-  `next.config.ts`는 무시됩니다.
-
-특히 CI에서 `next.config.js`가 생성되어 있던 것은
-엄청난 함정이었습니다.
-
-## 증상 4: next.config.js가 CI에서만 생성됨
-
-이 부분이 가장 특이했습니다.
-로컬에는 `next.config.js`가 없는데,
-Actions 로그에는 항상 생성되어 있었습니다.
-
-디버그 결과:
-
-- checkout 직후에는 `next.config.js`가 없음
-- **Setup Pages 이후에 `next.config.js`가 생성됨**
-
-그리고 그 파일 내용은 다음과 같았습니다.
-
-```js
-// Default Pages configuration for Next
-const nextConfig = {
-  images: { unoptimized: true },
-  experimental: { images: { unoptimized: true } },
-  basePath: "/my-site",
-};
-module.exports = nextConfig;
+```json
+{
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "build:export": "NEXT_PUBLIC_EXPORT=true next build",
+    "start": "next start"
+  }
+}
 ```
 
-즉, `actions/configure-pages@v3`가
-`next.config.js`를 강제로 만들어서
-TS 설정을 덮어쓴다는 것이었습니다.
+결과적으로:
 
-### 대응 방법
+- 로컬 확인: `npm run build:export`
+- 배포: 워크플로우에서 `npm run build:export`
 
-두 가지 방법이 있습니다.
+이 구조로 “out이 안 생기는” 류의 실수를 줄일 수 있습니다.
 
-1. `configure-pages`를 제거한다
-2. 생성된 `next.config.js`를 삭제한다
+### 4) `configure-pages`가 만든 `next.config.js`는 빌드 전에 삭제했다
 
-저는 2번을 선택했습니다.
+`actions/configure-pages@v3`는 편리하지만, Next 프로젝트에서는 `next.config.js`를 생성해 버립니다.  
+이 파일이 존재하면 `next.config.ts`가 무시되기 때문에, 빌드 전에 제거하는 방식으로 충돌을 해결했습니다.
 
 ```yml
 - name: Ensure TS config is used
@@ -189,9 +190,11 @@ TS 설정을 덮어쓴다는 것이었습니다.
     fi
 ```
 
-## 최종 워크플로우 요약
+이 조치 덕분에, “CI에선 왜 설정이 다르지?” 같은 혼란이 사라졌습니다.
 
-핵심만 남긴 배포 워크플로우는 아래와 같습니다.
+## 최종 워크플로우 (요약)
+
+디버그 스텝을 제거한 최종본은 아래와 같습니다.
 
 ```yml
 name: Deploy to GitHub Pages
@@ -258,60 +261,9 @@ jobs:
         uses: actions/deploy-pages@v4
 ```
 
-## export 빌드 스크립트 분리
+## (부록) next/font가 CI에서 실패할 수 있는 이유
 
-로컬에서도 export 빌드를 쉽게 확인할 수 있도록
-스크립트를 추가했습니다.
-
-```json
-{
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "build:export": "NEXT_PUBLIC_EXPORT=true next build",
-    "start": "next start"
-  }
-}
-```
-
-이제 다음처럼 사용할 수 있습니다.
-
-- 로컬 개발: `npm run dev`
-- 배포 빌드: `npm run build:export`
-
-## 로그로 보는 문제 흐름 요약
-
-### 1) out 폴더 누락
-
-```
-touch: cannot touch './out/.nojekyll': No such file or directory
-```
-
-### 2) export 모드 미적용
-
-```
-Route (app)
-┌ ○ /
-...
-```
-
-이 메시지만 보고는 export 모드가 활성화된 것처럼 보이지만,
-`out/`이 없다는 사실이 더 확실한 힌트였습니다.
-
-### 3) configure-pages의 자동 파일 생성
-
-```
-// Default Pages configuration for Next
-const nextConfig = {...}
-module.exports = nextConfig
-```
-
-이 한 줄이 모든 문제의 중심에 있었습니다.
-
-## 부수 이슈: next/font가 Actions에서 실패하는 경우
-
-로컬에서는 문제 없던 `next/font/google`가
-CI에서 네트워크 제한으로 실패할 수 있습니다.
+로컬에서는 문제 없던 `next/font/google`가 CI 네트워크 정책(방화벽/프록시/제한)에 따라 실패하는 경우도 있습니다.
 
 에러 예시:
 
@@ -320,73 +272,70 @@ next/font: error:
 Failed to fetch `Inter` from Google Fonts.
 ```
 
-이런 경우에는 선택지가 있습니다.
+이 경우에는 보통 아래 선택지 중 하나를 고려합니다.
 
-1. `NEXT_FONT_GOOGLE_MOCKED` 같은 환경 변수 사용
-2. 폰트를 로컬로 다운로드해서 self-host
-3. Actions에서 네트워크 허용
+1. 폰트를 self-host로 전환 (가장 확실함)
+2. CI 네트워크 정책/프록시 설정 점검
+3. 빌드 환경에서 폰트 fetch가 필요 없는 구조로 변경
 
-이번 케이스에서는 CI에서 폰트가 필요한 환경이 아니었기 때문에
-로컬 개발 환경만 유지하고, 배포 시에는 교체를 검토하고 있습니다.
+## 체크리스트
 
-## 체크리스트: 동일 문제를 피하려면
+비슷한 문제를 다시 만나지 않기 위한 체크리스트입니다.
 
-아래 체크리스트를 기준으로 점검하면 시행착오를 줄일 수 있습니다.
+1. 배포 환경이 “정적 호스팅”인지 먼저 확정
+2. `output: "export"`가 켜지는 조건을 한 곳에서 관리
+3. 컨텐츠/컴포넌트에 basePath 하드코딩 금지
+4. `out/` 생성 여부를 먼저 확인하고, 그 다음 `.nojekyll` 처리
+5. `actions/configure-pages`가 `next.config.js`를 생성할 수 있음을 기억
+6. CI에서 config가 덮어쓰기 되는지 항상 의심하기
 
-1. `next.config.ts`만 사용할 것인지 확정
-2. `configure-pages`가 생성하는 `next.config.js`에 주의
-3. export 모드 여부를 확실히 조건 처리
-4. `out/` 생성 여부를 항상 확인
-5. `basePath` 하드코딩 제거
-6. `NEXT_PUBLIC_BASE_PATH` 같은 환경 변수 통일
-7. `next/font` 사용 여부 점검
+## (부록) 디버깅을 빠르게 만드는 로그 스텝
+
+이번에는 디버그 스텝을 임시로 넣고, 원인이 확인되면 제거하는 방식이 가장 효율적이었습니다.
+특히 “파일이 언제 생겼는지”를 찍는 게 도움이 됐습니다.
+
+### out 생성 여부 확인
+
+```yml
+- name: Debug output
+  run: |
+    ls -la
+    ls -la out || true
+```
+
+### 어떤 커밋을 빌드 중인지 확인
+
+```yml
+- name: Debug git
+  run: |
+    git rev-parse HEAD
+    git status -sb
+```
+
+### Setup Pages가 설정 파일을 덮는지 확인
+
+```yml
+- name: Debug config files
+  run: |
+    ls -la next.config.*
+    if [ -f next.config.js ]; then sed -n '1,200p' next.config.js; fi
+```
+
+## (부록) 실제로 문제를 풀어간 순서 (타임라인)
+
+마지막으로, 제가 실제로 어떤 순서로 원인을 좁혀갔는지 타임라인으로 정리해둡니다.
+비슷한 상황에서 “어디부터 봐야 하지?”라는 고민을 줄이는 데 도움이 됩니다.
+
+1. `touch ./out/.nojekyll` 실패 확인 → out 자체가 없다
+2. 빌드 로그에서 export가 켜졌는지 의심 → `out/` 생성 여부가 더 결정적
+3. `next.config.ts` 조건부 export 로직 점검 → CI에서 조건이 불확실
+4. `build:export` 스크립트로 export 빌드 고정
+5. 워크플로우에 `ls -la`/`git status` 추가 → CI에만 `next.config.js`가 보임
+6. 생성 시점 디버그 → Setup Pages 이후에 생성되는 걸 확인
+7. 빌드 전에 `next.config.js` 제거 → `next.config.ts`가 정상 적용
+8. basePath 하드코딩 제거 + `withBasePath` 도입 → 로컬 이미지 404 해결
 
 ## 마무리
 
-Next.js와 GitHub Pages를 함께 쓰는 것은
-생각보다 많은 함정이 있습니다.
-
-하지만 원인을 분리해서 보면 해결은 꽤 단순합니다.
-
-- export 모드가 켜졌는가?
-- basePath는 어디서 적용되는가?
-- CI에서 config가 덮어쓰기 되지는 않는가?
-
-이 세 가지 질문을 기준으로 디버깅하면
-같은 문제에 오래 머물지 않을 수 있습니다.
-
-혹시 비슷한 문제를 겪고 있다면
-이 글의 로그와 체크리스트가 도움이 되기를 바랍니다.
-
-## 보너스: 문제 해결 타임라인
-
-아래는 실제로 문제를 추적해간 흐름을 요약한 타임라인입니다.
-
-1. `touch ./out/.nojekyll` 에러 발견
-2. `out/` 디렉터리 미생성 확인
-3. `next.config.ts` export 조건 확인
-4. `NEXT_PUBLIC_EXPORT` 환경 변수 추가
-5. `configure-pages`가 config를 덮어쓴다는 사실 발견
-6. `next.config.js` 제거 스텝 추가
-7. `out/` 정상 생성 확인
-8. 이미지 404 문제 해결 (`withBasePath`)
-
-이 순서대로 따라가면 누구라도 재현 가능한 문제 흐름이 됩니다.
-
-## 참고용 로그 스니펫
-
-```
-✓ Compiled successfully
-✓ Generating static pages ...
-✓ Exporting
-```
-
-위 로그가 보이면서 `out/`이 생성되면
-정상적으로 GitHub Pages에 배포할 준비가 완료된 상태입니다.
-
-## 마무리 한 줄
-
-GitHub Pages는 단순하지만,
-Next.js는 단순하지 않습니다.
-둘 사이의 간극을 이해하는 순간,
-배포는 훨씬 안정적으로 변합니다.
+이번 이슈의 교훈은 결국 하나였습니다.
+“정적 호스팅”이라는 제약을 인정하고, 로컬/배포 환경이 달라지는 지점을 코드와 워크플로우에서 명확히 분리하면 트러블슈팅이 훨씬 쉬워집니다.

@@ -1,7 +1,7 @@
 ---
 title: "대용량 엑셀 다운로드: 클라이언트에서 서버로"
 description: "클라이언트 기반 엑셀 생성의 한계를 극복하고 SSE를 활용한 서버 사이드 아키텍처로 성능과 사용자 경험을 개선한 경험을 공유합니다."
-date: "2025-01-04"
+date: "2025-11-12"
 tags: ["react", "performance"]
 slug: "excel-download-refectoring"
 coverImage: "/images/posts/excel-download-refectoring/cover.png"
@@ -35,10 +35,10 @@ async function fetchDataFromDatabase(pageNumber, pageSize, queryParams) {
   const offset = (pageNumber - 1) * pageSize;
   const items = await db.query(
     "SELECT * FROM data_records WHERE ... LIMIT ? OFFSET ?",
-    [pageSize, offset]
+    [pageSize, offset],
   );
   const totalCount = await db.query(
-    "SELECT COUNT(*) FROM data_records WHERE ..."
+    "SELECT COUNT(*) FROM data_records WHERE ...",
   );
   return {
     data: items,
@@ -72,7 +72,7 @@ function ExportProgressMonitor() {
       const data = JSON.parse(event.data);
       if (data.type === "progress") {
         setDownloadProgress(
-          Math.floor((data.collectedItems / data.totalItems) * 100)
+          Math.floor((data.collectedItems / data.totalItems) * 100),
         );
         setProgressMessage(`${data.message} (${data.collectedItems}개 수집)`);
       } else if (data.type === "complete") {
@@ -124,7 +124,7 @@ const handleDownloadClick = async (e) => {
     // 1. 모든 페이지의 데이터를 순차적으로 불러옴
     const { data, hasNext: next } = await requestPageData(
       props.exportType,
-      params.current
+      params.current,
     );
     if (data.length > 0) {
       collectedData.current = [...collectedData.current, ...data]; // 2. 클라이언트 메모리에 누적
@@ -149,7 +149,7 @@ const startExportDownload = async () => {
   link.href = url;
   link.setAttribute(
     "download",
-    `${exportConfig[props.exportType].filename}.xlsx`
+    `${exportConfig[props.exportType].filename}.xlsx`,
   );
   document.body.appendChild(link);
   link.click();
@@ -195,7 +195,7 @@ export async function POST(request: Request) {
         const exportData = await retrievePagedDataWithProgress(
           exportConfig.dataFetcher,
           params,
-          sendProgress // 진행 상황 콜백 함수
+          sendProgress, // 진행 상황 콜백 함수
         );
 
         if (exportData.length === 0) {
@@ -270,32 +270,44 @@ Excel 파일 생성 라이브러리를 `excel4node`에서 `ExcelJS`로 변경하
   </thead>
   <tbody>
     <tr>
-      <td><strong>스트리밍 지원</strong></td>
+      <td>
+        <strong>스트리밍 지원</strong>
+      </td>
       <td>미지원</td>
       <td>스트리밍 API로 대용량 파일 메모리 효율적 처리</td>
     </tr>
     <tr>
-      <td><strong>비동기 처리</strong></td>
+      <td>
+        <strong>비동기 처리</strong>
+      </td>
       <td>콜백 기반</td>
       <td>Promise 기반으로 async/await 자연스럽게 통합</td>
     </tr>
     <tr>
-      <td><strong>유지보수</strong></td>
+      <td>
+        <strong>유지보수</strong>
+      </td>
       <td>업데이트 중단 (2019년 이후 미활동)</td>
       <td>활발한 커뮤니티와 지속적인 업데이트</td>
     </tr>
     <tr>
-      <td><strong>기능 범위</strong></td>
+      <td>
+        <strong>기능 범위</strong>
+      </td>
       <td>쓰기 전용</td>
       <td>읽기/쓰기/수정 모두 지원</td>
     </tr>
     <tr>
-      <td><strong>서식 지원</strong></td>
+      <td>
+        <strong>서식 지원</strong>
+      </td>
       <td>기본적인 서식만 지원</td>
       <td>조건부 서식, 데이터 검증, 이미지 삽입 등 풍부한 기능</td>
     </tr>
     <tr>
-      <td><strong>TypeScript</strong></td>
+      <td>
+        <strong>TypeScript</strong>
+      </td>
       <td>타입 정의 불완전</td>
       <td>완전한 TypeScript 지원</td>
     </tr>

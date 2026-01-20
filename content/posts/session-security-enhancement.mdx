@@ -1,7 +1,7 @@
 ---
 title: 웹 플랫폼 인증 흐름 개선기
 description: "브라우저 세션 복원 시 발생할 수 있는 보안 취약점을 개선하고, SSR과 CSR 환경에서 인증 로직을 강화한 경험을 공유합니다."
-date: "2025-01-09"
+date: "2025-09-11"
 tags: ["auth", "ssr"]
 slug: "session-security-enhancement"
 coverImage: "/images/posts/session-security-enhancement/cover.png"
@@ -123,7 +123,6 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
 이 개선된 미들웨어는 크게 두 가지 환경(`process.server`와 `else` 즉 `process.client`)으로 분리되어 동작합니다.
 
 1.  **SSR 환경 (`if (process.server)`)**:
-
     - 기존에는 `userId`가 없으면 무조건 `fetchUserInfo()`를 호출했지만, 이제는 `sessionId` 쿠키가 `useCookie`를 통해 존재할 때만 `await authStore.fetchUserInfo()`를 호출합니다. 이 변경은 불필요한 사용자 정보 페칭을 방지하고, 실제 유효한 세션이 있을 때만 서버에서 사용자 정보를 가져오도록 하여 API 호출을 최적화하는 데 기여합니다.
     - 이는 서버 측에서 이미 `sessionId` 쿠키를 가지고 있다면, 클라이언트가 Hydration 되기 전에 사용자 정보를 미리 로드하여 로그인 상태를 유지하려는 전략입니다.
 

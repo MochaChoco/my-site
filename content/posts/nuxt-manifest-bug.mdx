@@ -1,7 +1,7 @@
 ---
 title: "Nuxt 3.8 업데이트 후 구형 WebView에서 발생한 App Manifest 에러 해결기"
 description: "Nuxt 3.8로 업데이트한 후 iOS WebView에서 발생한 #app-manifest import 오류의 원인을 파악하고, experimental.appManifest 설정을 통해 해결한 과정을 공유합니다."
-date: "2025-01-11"
+date: "2025-01-10"
 tags: ["vue", "browser"]
 slug: "nuxt-manifest-bug"
 coverImage: "/images/posts/nuxt-manifest-bug/cover.png"
@@ -102,7 +102,7 @@ if (process.client) {
   else if (window.location.href.includes("debug=vconsole")) {
     const vConsole = new VConsole();
     console.log(
-      "[v-console] URL 쿼리 파라미터를 통해 v-console이 활성화되었습니다."
+      "[v-console] URL 쿼리 파라미터를 통해 v-console이 활성화되었습니다.",
     );
   }
   // 그 외의 경우에는 v-console을 활성화하지 않습니다.

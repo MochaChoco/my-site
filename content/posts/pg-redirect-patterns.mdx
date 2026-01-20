@@ -1,7 +1,7 @@
 ---
 title: 외부 PG사 연동 시 리다이렉트 패턴 비교 - SDK vs Form POST vs GET
 description: "결제 시스템에서 다양한 외부 결제 서비스를 연동하면서 경험한 리다이렉트 패턴들의 차이점과 구현 방법을 공유합니다."
-date: "2025-01-17"
+date: "2025-10-22"
 tags: ["react"]
 slug: "pg-redirect-patterns"
 coverImage: "/images/posts/pg-redirect-patterns/cover.png"
@@ -200,7 +200,7 @@ async function initiatePayment() {
         // Form POST 방식 (단일 파라미터)
         submitPaymentForm(
           paymentData.pgRedirectUrl,
-          paymentData.encryptedParams
+          paymentData.encryptedParams,
         );
         break;
 
@@ -364,7 +364,7 @@ export async function GET(request: NextRequest) {
   if (resultStatus !== "Success") {
     return redirect(
       `/payment/fail?orderKey=${orderKey}&resultStatus=UserCancel`,
-      RedirectType.push
+      RedirectType.push,
     );
   }
 
@@ -378,9 +378,9 @@ export async function GET(request: NextRequest) {
   // 통합 완료 페이지로 리다이렉트
   return redirect(
     `/payment/complete?payMethod=EASY_PAY_A&orderKey=${orderKey}&returnParams=${encodeURIComponent(
-      returnParams
+      returnParams,
     )}`,
-    RedirectType.push
+    RedirectType.push,
   );
 }
 
@@ -428,7 +428,7 @@ export async function POST(request: NextRequest) {
     `/payment/complete?payMethod=${methodType}&orderKey=${orderKey}&returnParams=${
       returnParams && encodeURIComponent(returnParams)
     }`,
-    RedirectType.push
+    RedirectType.push,
   );
 }
 ```

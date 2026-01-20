@@ -1,14 +1,13 @@
 ---
 title: "모바일 환경에서의 본인 인증 플로우 개선하기"
 description: "window.open과 window.opener의 한계를 극복하고, sessionStorage를 활용하여 모바일 환경에서도 안정적으로 동작하는 본인 인증 플로우를 구현한 경험을 공유합니다."
-date: "2025-01-18"
+date: "2025-10-28"
 tags: ["vue", "auth"]
 slug: "mobile-identity-authflow"
 coverImage: "/images/posts/mobile-identity-authflow/cover.png"
 ---
 
 ![커버 이미지](/images/posts/mobile-identity-authflow/cover.png)
-
 
 안녕하세요. 오늘은 모바일 환경에서의 본인 인증 플로우를 개선하며 겪었던 이야기와 해결 과정을 공유하려 합니다.
 
@@ -32,6 +31,7 @@ coverImage: "/images/posts/mobile-identity-authflow/cover.png"
 리다이렉트 과정에서 데이터를 유지하기 위해 `sessionStorage`를 활용했습니다. `sessionStorage`는 각 브라우저 탭에 고유하게 데이터가 유지되며, 페이지 리다이렉트나 새로고침에도 보존되지만 탭을 닫으면 자동으로 삭제되는 특성이 있습니다.
 
 **인증 플로우:**
+
 1. **인증 시작**: 현재 페이지 URL을 `sessionStorage`에 저장 후 인증 페이지로 리다이렉트
 2. **인증 완료**: 콜백 페이지에서 인증 결과를 `sessionStorage`에 저장
 3. **원본 페이지 복귀**: 저장된 URL로 리다이렉트
@@ -133,19 +133,19 @@ export default function useIdentityAuth(generateAuthUrl) {
 
 ```vue
 <script setup>
-import { useRoute } from 'vue-router'
-import { onMounted } from 'vue'
+import { useRoute } from "vue-router";
+import { onMounted } from "vue";
 
-const route = useRoute()
+const route = useRoute();
 
 onMounted(() => {
-  const authResult = route.query.authResult
+  const authResult = route.query.authResult;
   if (authResult) {
     // 무조건 window.opener에 의존하여 결과 전달
-    window.opener.handleAuthResult(authResult)
-    window.close()
+    window.opener.handleAuthResult(authResult);
+    window.close();
   }
-})
+});
 </script>
 ```
 
@@ -155,28 +155,28 @@ onMounted(() => {
 
 ```vue
 <script setup>
-import { useRoute } from 'vue-router'
-import { onMounted } from 'vue'
+import { useRoute } from "vue-router";
+import { onMounted } from "vue";
 
-const route = useRoute()
+const route = useRoute();
 
 onMounted(() => {
-  const authResult = route.query.authResult
+  const authResult = route.query.authResult;
   if (authResult) {
     if (window?.opener?.handleAuthResult) {
       // 데스크톱 팝업 환경
-      window.opener.handleAuthResult(authResult)
-      window.close()
+      window.opener.handleAuthResult(authResult);
+      window.close();
     } else {
       // 모바일 리다이렉트 환경
-      sessionStorage.setItem('auth_result', authResult)
-      const returnPath = sessionStorage.getItem('auth_return_path')
+      sessionStorage.setItem("auth_result", authResult);
+      const returnPath = sessionStorage.getItem("auth_return_path");
       if (returnPath) {
-        window.location.href = returnPath
+        window.location.href = returnPath;
       }
     }
   }
-})
+});
 </script>
 
 <template>
@@ -195,17 +195,17 @@ onMounted(() => {
 
 **Before: 인증 페이지 (이전 코드)**
 
-```vue 
+```vue
 <script setup>
-  import {useRoute} from 'vue-router'
-  import useIdentityAuth from '@/composables/useIdentityAuth'
+import { useRoute } from "vue-router";
+import useIdentityAuth from "@/composables/useIdentityAuth";
 
-  const route = useRoute()
-  const { startAuth } = useIdentityAuth(() => generateAuthUrl()) // 인증 시작 버튼 클릭 시 바로 호출
+const route = useRoute();
+const { startAuth } = useIdentityAuth(() => generateAuthUrl()); // 인증 시작 버튼 클릭 시 바로 호출
 
-  function handleAuthClick() {
-    startAuth()
-  }
+function handleAuthClick() {
+  startAuth();
+}
 </script>
 ```
 
@@ -215,46 +215,46 @@ onMounted(() => {
 
 ```vue
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
-import { useBrowserSize } from '@/composables/browserSize'
-import useIdentityAuth from '@/composables/useIdentityAuth'
+import { ref, onMounted } from "vue";
+import { useRoute } from "vue-router";
+import { useBrowserSize } from "@/composables/browserSize";
+import useIdentityAuth from "@/composables/useIdentityAuth";
 
-const route = useRoute()
-const { isDesktop } = useBrowserSize()
-const userData = ref({})
-const { startAuth } = useIdentityAuth(() => generateAuthUrl())
+const route = useRoute();
+const { isDesktop } = useBrowserSize();
+const userData = ref({});
+const { startAuth } = useIdentityAuth(() => generateAuthUrl());
 
 onMounted(() => {
   // 모바일 리다이렉트 후 돌아온 경우 세션 확인
-  const authResult = sessionStorage.getItem('auth_result')
-  const returnPath = sessionStorage.getItem('auth_return_path')
+  const authResult = sessionStorage.getItem("auth_result");
+  const returnPath = sessionStorage.getItem("auth_return_path");
 
   if (authResult && returnPath) {
-    handleAuthResult(authResult)
+    handleAuthResult(authResult);
   }
 
   // 세션 데이터 클리어
-  sessionStorage.removeItem('auth_result')
-  sessionStorage.removeItem('auth_return_path')
+  sessionStorage.removeItem("auth_result");
+  sessionStorage.removeItem("auth_return_path");
 
   // 데스크톱 팝업에서 호출될 전역 함수 설정
   window.handleAuthResult = (result) => {
-    handleAuthResult(result)
-  }
-})
+    handleAuthResult(result);
+  };
+});
 
 function handleAuthClick() {
   if (!isDesktop.value) {
     // 모바일: 입력 데이터를 임시 저장
-    saveUserData(userData.value)
+    saveUserData(userData.value);
   }
-  startAuth()
+  startAuth();
 }
 
 function handleAuthResult(result) {
   // 인증 결과 처리 로직
-  console.log('인증 완료:', result)
+  console.log("인증 완료:", result);
 }
 </script>
 ```

@@ -1,7 +1,7 @@
 ---
 title: "웹 애플리케이션의 외부 서비스 연동 보안 강화: postMessage 데이터 검증 사례"
 description: "브라우저 확장 프로그램으로 인한 불완전한 데이터 유입 문제를 발견하고, postMessage 통신의 데이터 검증 로직을 강화하여 외부 서비스 연동의 안정성을 향상시킨 경험을 공유합니다."
-date: "2025-01-10"
+date: "2025-02-18"
 tags: ["auth", "browser"]
 slug: "postmessage-security-validation"
 coverImage: "/images/posts/postmessage-security-validation/cover.png"
@@ -152,7 +152,7 @@ async function handleAuthMessage(messageData: any) {
     !messageData.state
   ) {
     console.warn(
-      "PostMessage: Missing or invalid required authentication data."
+      "PostMessage: Missing or invalid required authentication data.",
     );
     // TODO: 프로덕션 환경에서는 사용자에게 의미 있는 오류 메시지를 제공하거나 로깅 시스템에 기록합니다.
     return;
@@ -191,7 +191,7 @@ function receiveMessage(event: MessageEvent) {
   const ALLOWED_ORIGIN = "https://auth-provider.example.com";
   if (event.origin !== ALLOWED_ORIGIN) {
     console.warn(
-      `Unauthorized message origin: ${event.origin}. Expected: ${ALLOWED_ORIGIN}`
+      `Unauthorized message origin: ${event.origin}. Expected: ${ALLOWED_ORIGIN}`,
     );
     return;
   }
@@ -205,7 +205,7 @@ function receiveMessage(event: MessageEvent) {
   ) {
     console.warn(
       "PostMessage: Received invalid data format, or missing critical fields.",
-      event.data
+      event.data,
     );
     return;
   }
@@ -233,7 +233,7 @@ async function processAuthenticationApi(data: any) {
   // 개발 환경에서만 로깅: 프로덕션에서는 민감 정보를 로깅하지 않도록 주의
   // console.log('Calling processAuthenticationApi with data:', data);
   return new Promise((resolve) =>
-    setTimeout(() => resolve({ success: true }), 1000)
+    setTimeout(() => resolve({ success: true }), 1000),
   ); // 모의 응답
 }
 ```

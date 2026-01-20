@@ -1,4 +1,4 @@
-import { getAllPosts, getPostBySlug } from "@/lib/posts";
+import { getAllPosts, getPostBySlug, getPostAdjacent } from "@/lib/posts";
 import { MDXRemote } from "next-mdx-remote/rsc";
 import rehypePrettyCode from "rehype-pretty-code";
 import { rehypeBasePath } from "@/lib/rehype-base-path";
@@ -8,6 +8,8 @@ import { CopyButton } from "@/components/copy-button";
 import { cn, formatDate } from "@/lib/utils";
 import { withBasePath } from "@/lib/base-path";
 import type { ComponentPropsWithoutRef } from "react";
+import { PostNavigation } from "@/components/post-navigation";
+import { ScrollToTop } from "@/components/scroll-to-top";
 
 export async function generateStaticParams() {
   const posts = await getAllPosts();
@@ -134,6 +136,7 @@ export default async function PostPage({
 }) {
   const { slug } = await params;
   const post = await getPostBySlug(slug);
+  const { prev, next } = await getPostAdjacent(slug);
 
   if (!post) {
     notFound();
@@ -176,6 +179,8 @@ export default async function PostPage({
           }}
         />
       </div>
+      <PostNavigation prev={prev} next={next} />
+      <ScrollToTop />
     </article>
   );
 }

@@ -1,6 +1,7 @@
 import { getAllPosts } from "@/lib/posts";
 import { PostCard } from "@/components/post-card";
 import { buildPageMetadata } from "@/lib/metadata";
+import { ScrollToTop } from "@/components/scroll-to-top";
 
 export const metadata = buildPageMetadata("/");
 
@@ -23,6 +24,7 @@ export default async function Home() {
           <PostCard key={post.slug} post={post} />
         ))}
       </div>
+      <ScrollToTop />
     </div>
   );
 }

@@ -79,3 +79,23 @@ export async function getPostsByTag(tag: string): Promise<PostMeta[]> {
   const posts = await getAllPosts();
   return posts.filter((post) => post.frontmatter.tags?.includes(tag));
 }
+
+export async function getPostAdjacent(slug: string): Promise<{
+  prev: PostMeta | null;
+  next: PostMeta | null;
+}> {
+  const posts = await getAllPosts();
+  const index = posts.findIndex((post) => post.slug === slug);
+
+  if (index === -1) {
+    return { prev: null, next: null };
+  }
+
+  // posts are sorted by date desc (Newest first)
+  // next: index - 1 (Newer)
+  // prev: index + 1 (Older)
+  const next = index > 0 ? posts[index - 1] : null;
+  const prev = index < posts.length - 1 ? posts[index + 1] : null;
+
+  return { prev, next };
+}

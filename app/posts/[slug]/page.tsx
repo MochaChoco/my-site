@@ -5,7 +5,7 @@ import { rehypeBasePath } from "@/lib/rehype-base-path";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { CopyButton } from "@/components/copy-button";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import { withBasePath } from "@/lib/base-path";
 import type { ComponentPropsWithoutRef } from "react";
 
@@ -145,6 +145,9 @@ export default async function PostPage({
         <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl lg:text-5xl">
           {post.frontmatter.title}
         </h1>
+        <time className="block text-muted-foreground">
+          {formatDate(post.frontmatter.date)}
+        </time>
         <div className="flex flex-wrap justify-center gap-2 text-sm text-muted-foreground">
           {post.frontmatter.tags?.map((tag) => (
             <span key={tag} className="bg-secondary px-2 py-1 rounded-md">

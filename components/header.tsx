@@ -6,7 +6,7 @@ export function Header() {
     <header className="border-b">
       <div className="container mx-auto px-4 py-3 sm:py-0 sm:h-16 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Link href="/" className="font-bold text-xl">
-          DevBlog
+          MochaChoco's DevBlog
         </Link>
         <nav className="flex flex-wrap items-center gap-3 text-sm sm:gap-6 sm:text-base">
           <Link href="/posts" className="hover:text-primary transition-colors">

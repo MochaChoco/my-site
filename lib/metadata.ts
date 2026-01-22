@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 const SITE_URL = "https://mochachoco.github.io/blog";
 
-const DEFAULT_TITLE = "DevBlog";
+const DEFAULT_TITLE = "MochaChoco's DevBlog";
 const DEFAULT_DESCRIPTION = "웹 개발자의 기술블로그입니다.";
 const DEFAULT_KEYWORDS = [
   "웹 개발",
@@ -12,6 +12,15 @@ const DEFAULT_KEYWORDS = [
   "dev",
 ];
 const DEFAULT_IMAGE = "/images/og-image.png";
+
+export const SITE_ICONS: Metadata["icons"] = {
+  icon: [
+    { url: "/favicon.ico" },
+    { url: "/favicon.svg", type: "image/svg+xml" },
+    { url: "/favicon-96x96.png", sizes: "96x96", type: "image/png" },
+  ],
+  apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+};
 
 const siteUrl = new URL(SITE_URL);
 const siteOrigin = siteUrl.origin;
@@ -41,6 +50,7 @@ export const buildPageMetadata = (pathname: string): Metadata => {
     title: DEFAULT_TITLE,
     description: DEFAULT_DESCRIPTION,
     keywords: DEFAULT_KEYWORDS,
+    icons: SITE_ICONS,
     alternates: {
       canonical: url,
     },

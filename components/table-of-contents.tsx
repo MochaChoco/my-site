@@ -72,7 +72,7 @@ const TocList = ({
           <li
             key={item.id}
             className={cn(
-              "text-muted-foreground hover:text-blue-600 hover:font-semibold transition-colors",
+              "text-muted-foreground hover:text-blue-600 dark:hover:text-blue-500 hover:font-semibold transition-colors",
               isActive && "text-foreground font-semibold",
               item.level === 3 && "pl-3",
               item.level === 4 && "pl-6",

@@ -101,7 +101,8 @@ const getNodeText = (node: ReactNode): string => {
     return node.map(getNodeText).join("");
   }
   if (isValidElement(node)) {
-    return getNodeText(node.props.children);
+    const { children } = node.props as { children?: ReactNode };
+    return getNodeText(children);
   }
   return "";
 };

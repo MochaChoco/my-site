@@ -3,7 +3,7 @@ import { ThemeToggle } from "./theme-toggle";
 
 export function Header() {
   return (
-    <header className="border-b">
+    <header className="border-b print:hidden">
       <div className="container mx-auto px-4 py-3 sm:py-0 sm:h-16 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Link href="/" className="font-bold text-xl">
           MochaChoco's DevBlog

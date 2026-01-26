@@ -12,7 +12,7 @@ interface PostNavigationProps {
 
 export function PostNavigation({ prev, next }: PostNavigationProps) {
   return (
-    <nav className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-12 pt-8 border-t">
+    <nav className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-12 pt-8 border-t print:hidden">
       {prev ? (
         <NavButton post={prev} direction="prev" />
       ) : (

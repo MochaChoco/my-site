@@ -16,7 +16,7 @@ export function RelatedPosts({ posts }: RelatedPostsProps) {
   if (posts.length === 0) return null;
 
   return (
-    <div className="mt-16 pt-8 border-t">
+    <div className="mt-16 pt-8 border-t print:hidden">
       <h2 className="text-2xl font-bold tracking-tight mb-6">Related Posts</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {posts.map((post) => (

@@ -97,7 +97,7 @@ export function TableOfContents({ items }: TocProps) {
   if (items.length === 0) return null;
 
   return (
-    <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+    <div className="rounded-lg border border-border bg-card p-4 shadow-sm print:hidden">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         On this page
       </p>
@@ -131,7 +131,7 @@ export function MobileToc({ items }: TocProps) {
   if (items.length === 0) return null;
 
   return (
-    <div className="lg:hidden">
+    <div className="lg:hidden print:hidden">
       <button
         type="button"
         onClick={() => setOpen(true)}

@@ -199,3 +199,244 @@ html {
   color: rgb(236 72 153); /* pink-500 */
   background-color: rgb(31 41 55); /* gray-800 */
 }
+
+/* 인쇄 스타일 */
+@media print {
+  /* 라이트 모드 CSS 변수 강제 적용 */
+  :root,
+  .dark {
+    --background: 0 0% 100% !important;
+    --foreground: 222.2 84% 4.9% !important;
+    --card: 0 0% 100% !important;
+    --card-foreground: 222.2 84% 4.9% !important;
+    --popover: 0 0% 100% !important;
+    --popover-foreground: 222.2 84% 4.9% !important;
+    --primary: 221.2 83.2% 53.3% !important;
+    --primary-foreground: 210 40% 98% !important;
+    --secondary: 210 40% 96.1% !important;
+    --secondary-foreground: 222.2 47.4% 11.2% !important;
+    --muted: 210 40% 96.1% !important;
+    --muted-foreground: 215.4 16.3% 46.9% !important;
+    --accent: 210 40% 96.1% !important;
+    --accent-foreground: 222.2 47.4% 11.2% !important;
+    --border: 214.3 31.8% 91.4% !important;
+    --input: 214.3 31.8% 91.4% !important;
+    --ring: 221.2 83.2% 53.3% !important;
+  }
+
+  /* 모든 요소에 배경색 인쇄 허용 */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  html,
+  body {
+    background: white !important;
+    background-color: white !important;
+    color: black !important;
+    color-scheme: light !important;
+  }
+
+  /* 다크 모드 클래스 무효화 */
+  .dark {
+    background: white !important;
+    background-color: white !important;
+    color: black !important;
+  }
+
+  /* 헤더, 푸터, 목차, 공유 버튼, 네비게이션 숨김 */
+  header,
+  footer,
+  aside,
+  nav,
+  .share-buttons,
+  .scroll-to-top,
+  .post-navigation,
+  .related-posts,
+  .mobile-toc {
+    display: none !important;
+  }
+
+  /* 본문 레이아웃 최적화 */
+  html,
+  body {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  main > div {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+  }
+
+  article {
+    display: block !important;
+    max-width: 100% !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  /* prose 기본 색상 - 코드 블록 제외 */
+  .prose > :not(figure):not(pre),
+  .dark .prose > :not(figure):not(pre) {
+    color: black !important;
+  }
+
+  .prose h1,
+  .prose h2,
+  .prose h3,
+  .prose h4,
+  .prose h5,
+  .prose h6,
+  .dark .prose h1,
+  .dark .prose h2,
+  .dark .prose h3,
+  .dark .prose h4,
+  .dark .prose h5,
+  .dark .prose h6 {
+    color: black !important;
+  }
+
+  .prose > p,
+  .prose > ul > li,
+  .prose > ol > li,
+  .prose strong,
+  .dark .prose > p,
+  .dark .prose > ul > li,
+  .dark .prose > ol > li,
+  .dark .prose strong {
+    color: black !important;
+  }
+
+  /* 리스트 마커 */
+  .prose > ul > li::marker,
+  .prose > ol > li::marker,
+  .dark .prose > ul > li::marker,
+  .dark .prose > ol > li::marker {
+    color: black !important;
+  }
+
+  /* 코드 블록 인쇄 최적화 - 원래 테마 유지, 줄바꿈만 처리 */
+  pre,
+  .prose pre,
+  .dark .prose pre {
+    white-space: pre-wrap !important;
+    word-wrap: break-word !important;
+    border: 1px solid #ccc !important;
+    padding: 1rem !important;
+  }
+
+  /* 코드 블록 wrapper */
+  .prose div.relative,
+  .dark .prose div.relative {
+    background: transparent !important;
+  }
+
+  /* 코드 라인 표시 */
+  pre code > span {
+    display: block !important;
+  }
+
+  /* 인라인 코드 인쇄 최적화 */
+  .prose :not(pre) > code,
+  .prose h1 code,
+  .prose h2 code,
+  .prose h3 code,
+  .prose h4 code,
+  .prose p code,
+  .prose li code,
+  .dark .prose :not(pre) > code,
+  .dark .prose h1 code,
+  .dark .prose h2 code,
+  .dark .prose h3 code,
+  .dark .prose h4 code,
+  .dark .prose p code,
+  .dark .prose li code {
+    background: #eee !important;
+    background-color: #eee !important;
+    color: #c7254e !important;
+    border: 1px solid #ccc !important;
+    padding: 0.1em 0.3em !important;
+  }
+
+  /* 링크 스타일 */
+  .prose a,
+  .dark .prose a {
+    color: #0066cc !important;
+    text-decoration: underline !important;
+  }
+
+  /* 외부 링크 URL 표시 */
+  .prose a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.75em;
+    color: #666 !important;
+    word-break: break-all;
+  }
+
+  /* 테이블 스타일 */
+  .prose table,
+  .dark .prose table {
+    border: 1px solid #ccc !important;
+  }
+
+  .prose th,
+  .prose td,
+  .dark .prose th,
+  .dark .prose td {
+    border: 1px solid #ccc !important;
+    color: black !important;
+  }
+
+  .prose th,
+  .dark .prose th {
+    background-color: #f5f5f5 !important;
+  }
+
+  /* 인용문 */
+  .prose blockquote,
+  .dark .prose blockquote {
+    border-left-color: #ccc !important;
+    color: #333 !important;
+  }
+
+  /* 이미지 페이지 분리 방지 */
+  .prose img {
+    break-inside: avoid;
+    max-width: 100% !important;
+  }
+
+  /* 제목 페이지 분리 방지 */
+  .prose h1,
+  .prose h2,
+  .prose h3,
+  .prose h4 {
+    break-after: avoid;
+  }
+
+  /* 코드 블록 복사 버튼 숨김 */
+  .copy-button,
+  [class*="copy"] {
+    display: none !important;
+  }
+
+  /* 제목 영역 스타일 */
+  h1,
+  time {
+    color: black !important;
+  }
+
+  .text-muted-foreground {
+    color: #666 !important;
+  }
+}

@@ -141,7 +141,7 @@ export default async function PostPage({
   const components = {
     // Simple Override for Pre to include Copy Button
     pre: ({ children, className, ...props }: ComponentPropsWithoutRef<"pre">) => (
-      <div className="relative group">
+      <div className="relative group print:static">
         <pre
           className={cn(
             "overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700 p-4 my-4 text-xs leading-6 sm:text-sm",
@@ -153,7 +153,7 @@ export default async function PostPage({
         </pre>
         <CopyButton
           text=""
-          className="absolute right-4 top-4 opacity-0 group-hover:opacity-100 transition-opacity"
+          className="absolute right-4 top-4 opacity-0 group-hover:opacity-100 transition-opacity print:hidden"
         />
       </div>
     ),
@@ -200,7 +200,7 @@ export default async function PostPage({
             <time className="block text-muted-foreground">
               {formatDate(post.frontmatter.date)}
             </time>
-            <div className="flex flex-wrap justify-center gap-2 text-sm text-muted-foreground">
+            <div className="flex flex-wrap justify-center gap-2 text-sm text-muted-foreground print:hidden">
               {post.frontmatter.tags?.map((tag) => (
                 <Link
                   key={tag}

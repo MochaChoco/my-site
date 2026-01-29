@@ -100,6 +100,8 @@ class CommentBoxManager {
       onCommentUpdate: options.onCommentUpdate || null,
       onCommentDelete: options.onCommentDelete || null,
       onReplyAdd: options.onReplyAdd || null,
+      onCommentLike: options.onCommentLike || null,
+      onDeleteConfirm: options.onDeleteConfirm || null,
     };
   }
 

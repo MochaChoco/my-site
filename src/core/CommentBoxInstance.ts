@@ -190,6 +190,20 @@ export class CommentBoxInstance {
     );
     this.cleanupFunctions.push(cleanupReplyToggle);
 
+    // 좋아요 버튼
+    const cleanupLike = delegate(
+      this.container,
+      `.${prefix}-like-btn`,
+      'click',
+      (_, target) => {
+        const commentId = target.dataset.commentId;
+        if (commentId) {
+          this.toggleLike(commentId, target as HTMLElement);
+        }
+      }
+    );
+    this.cleanupFunctions.push(cleanupLike);
+
     // 페이지네이션
     const cleanupPage = delegate(
       this.container,
@@ -337,6 +351,7 @@ export class CommentBoxInstance {
         const commentId = editor.dataset.commentId;
         if (commentId) {
           const updated = await this.api.updateComment(commentId, { content });
+          this.setState({ editingComment: null });
           this.emitter.emit(EVENTS.COMMENT_UPDATE, updated);
           this.options.onCommentUpdate?.(updated);
         }
@@ -517,30 +532,153 @@ export class CommentBoxInstance {
   }
 
   private startEdit(commentId: string): void {
-    // 기존 구현에서는 간단하게 알림 처리
-    // 실제로는 인라인 에디터로 교체해야 함
-    console.warn('Edit feature - to be implemented inline', commentId);
+    const { cssPrefix, messages } = this.options;
+
+    // 이미 수정 중인 댓글이 있으면 먼저 취소
+    if (this.state.editingComment) {
+      this.cancelEdit(this.state.editingComment);
+    }
+
+    // 댓글 DOM 요소 탐색
+    const commentEl = this.container.querySelector(
+      `[data-comment-id="${commentId}"]`
+    ) as HTMLElement;
+    if (!commentEl) return;
+
+    const contentEl = commentEl.querySelector(
+      `.${cssPrefix}-comment-content`
+    ) as HTMLElement;
+    const footerEl = commentEl.querySelector(
+      `.${cssPrefix}-comment-footer`
+    ) as HTMLElement;
+    if (!contentEl) return;
+
+    // 원본 HTML 저장 (취소 시 복원용)
+    contentEl.dataset.originalHtml = contentEl.innerHTML;
+
+    // data-raw-content에서 원본 텍스트 읽기
+    const rawContent = contentEl.dataset.rawContent || '';
+
+    // 에디터로 교체
+    contentEl.innerHTML = editorTemplate(cssPrefix, messages, {
+      mode: 'edit',
+      initialValue: rawContent,
+      commentId,
+    });
+
+    // footer 숨기기
+    if (footerEl) {
+      hide(footerEl);
+    }
+
+    // textarea focus
+    const textarea = contentEl.querySelector(
+      `.${cssPrefix}-editor-textarea`
+    ) as HTMLTextAreaElement;
+    if (textarea) {
+      textarea.focus();
+      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    }
+
+    this.setState({ editingComment: commentId });
   }
 
-  private cancelEdit(_commentId: string): void {
+  private cancelEdit(commentId: string): void {
+    const { cssPrefix } = this.options;
+
+    const commentEl = this.container.querySelector(
+      `[data-comment-id="${commentId}"]`
+    ) as HTMLElement;
+
+    if (commentEl) {
+      const contentEl = commentEl.querySelector(
+        `.${cssPrefix}-comment-content`
+      ) as HTMLElement;
+      const footerEl = commentEl.querySelector(
+        `.${cssPrefix}-comment-footer`
+      ) as HTMLElement;
+
+      // 원본 HTML 복원
+      if (contentEl?.dataset.originalHtml) {
+        contentEl.innerHTML = contentEl.dataset.originalHtml;
+        delete contentEl.dataset.originalHtml;
+      }
+
+      // footer 다시 표시
+      if (footerEl) {
+        show(footerEl);
+      }
+    }
+
     this.setState({ editingComment: null });
-    this.render();
   }
 
-  private async deleteComment(commentId: string): Promise<void> {
-    const { messages } = this.options;
+  private async toggleLike(commentId: string, buttonEl: HTMLElement): Promise<void> {
+    const { cssPrefix, auth } = this.options;
 
-    if (!confirm(messages.confirmDelete)) {
+    // 로그인 확인
+    if (auth && !auth.isLoggedIn()) {
+      auth.onLoginRequired?.();
       return;
     }
 
+    const isActive = buttonEl.classList.contains(`${cssPrefix}-like-btn--active`);
+
     try {
-      await this.api.deleteComment(commentId);
-      this.emitter.emit(EVENTS.COMMENT_DELETE, commentId);
-      this.options.onCommentDelete?.(commentId);
-      await this.loadComments();
+      const updated = isActive
+        ? await this.api.unlikeComment(commentId)
+        : await this.api.likeComment(commentId);
+
+      // 버튼만 부분 업데이트 (전체 render 없음)
+      if (updated.isLiked) {
+        buttonEl.classList.add(`${cssPrefix}-like-btn--active`);
+      } else {
+        buttonEl.classList.remove(`${cssPrefix}-like-btn--active`);
+      }
+
+      const iconEl = buttonEl.querySelector(`.${cssPrefix}-like-icon`);
+      const countEl = buttonEl.querySelector(`.${cssPrefix}-like-count`);
+
+      if (iconEl) {
+        iconEl.innerHTML = updated.isLiked ? '&#9829;' : '&#9825;';
+      }
+      if (countEl) {
+        countEl.textContent = updated.likeCount > 0 ? String(updated.likeCount) : '';
+      }
+
+      // state.comments 배열 내 해당 댓글 업데이트
+      const comments = this.state.comments.map((c) =>
+        c.id === commentId ? { ...c, likeCount: updated.likeCount, isLiked: updated.isLiked } : c
+      );
+      this.setState({ comments });
+
+      this.emitter.emit(EVENTS.COMMENT_LIKE, { comment: updated, liked: updated.isLiked });
+      this.options.onCommentLike?.(updated, updated.isLiked);
     } catch (error) {
       this.handleError(error as Error);
+    }
+  }
+
+  private async deleteComment(commentId: string): Promise<void> {
+    const { messages, onDeleteConfirm } = this.options;
+
+    const executeDelete = async () => {
+      try {
+        await this.api.deleteComment(commentId);
+        this.emitter.emit(EVENTS.COMMENT_DELETE, commentId);
+        this.options.onCommentDelete?.(commentId);
+        await this.loadComments();
+      } catch (error) {
+        this.handleError(error as Error);
+      }
+    };
+
+    if (onDeleteConfirm) {
+      onDeleteConfirm(commentId, () => executeDelete());
+    } else {
+      if (confirm(messages.confirmDelete)) {
+        await executeDelete();
+      }
     }
   }
 

@@ -2,7 +2,7 @@ import type { Comment } from '../../types/comment';
 import type { Messages } from '../../types/options';
 import { formatMessage } from '../../i18n';
 import { timeAgo } from '../../utils/datetime';
-import { processContent } from '../../utils/sanitize';
+import { processContent, escapeAttr } from '../../utils/sanitize';
 
 /**
  * 메인 컨테이너 템플릿
@@ -44,14 +44,16 @@ export function editorTemplate(
     mode?: 'create' | 'edit' | 'reply';
     initialValue?: string;
     parentId?: string;
+    commentId?: string;
   } = {}
 ): string {
-  const { mode = 'create', initialValue = '', parentId } = options;
+  const { mode = 'create', initialValue = '', parentId, commentId } = options;
   const parentAttr = parentId ? `data-parent-id="${parentId}"` : '';
+  const commentIdAttr = commentId ? `data-comment-id="${commentId}"` : '';
   const modeClass = mode !== 'create' ? `${prefix}-editor--${mode}` : '';
 
   return `
-    <div class="${prefix}-editor ${modeClass}" ${parentAttr}>
+    <div class="${prefix}-editor ${modeClass}" ${parentAttr} ${commentIdAttr}>
       <div class="${prefix}-editor-inner">
         <textarea
           class="${prefix}-editor-textarea"
@@ -126,8 +128,14 @@ export function commentItemTemplate(
             ${managerBadge}
             <span class="${prefix}-time">${time}</span>
           </div>
-          <div class="${prefix}-comment-content">${content}</div>
+          <div class="${prefix}-comment-content" data-raw-content="${escapeAttr(comment.content)}">${content}</div>
           <div class="${prefix}-comment-footer">
+            <button type="button"
+              class="${prefix}-like-btn ${comment.isLiked ? `${prefix}-like-btn--active` : ''}"
+              data-comment-id="${comment.id}">
+              <span class="${prefix}-like-icon">${comment.isLiked ? '&#9829;' : '&#9825;'}</span>
+              <span class="${prefix}-like-count">${comment.likeCount > 0 ? comment.likeCount : ''}</span>
+            </button>
             <button type="button" class="${prefix}-action-btn" data-action="reply" data-comment-id="${comment.id}">
               ${messages.reply}
             </button>
@@ -187,8 +195,14 @@ export function replyItemTemplate(
           ${managerBadge}
           <span class="${prefix}-time">${time}</span>
         </div>
-        <div class="${prefix}-comment-content">${content}</div>
+        <div class="${prefix}-comment-content" data-raw-content="${escapeAttr(reply.content)}">${content}</div>
         <div class="${prefix}-comment-footer">
+          <button type="button"
+            class="${prefix}-like-btn ${reply.isLiked ? `${prefix}-like-btn--active` : ''}"
+            data-comment-id="${reply.id}">
+            <span class="${prefix}-like-icon">${reply.isLiked ? '&#9829;' : '&#9825;'}</span>
+            <span class="${prefix}-like-count">${reply.likeCount > 0 ? reply.likeCount : ''}</span>
+          </button>
           ${ownerActions}
         </div>
       </div>

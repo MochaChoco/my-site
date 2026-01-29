@@ -261,6 +261,62 @@
 }
 
 // =============================================
+// Like Button
+// =============================================
+
+.cb-like-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: var(--cb-spacing-xs) var(--cb-spacing-sm);
+  font-family: inherit;
+  font-size: var(--cb-font-size-sm);
+  color: var(--cb-color-text-secondary);
+  background: none;
+  border: none;
+  border-radius: var(--cb-radius-sm);
+  cursor: pointer;
+  transition:
+    color var(--cb-transition-fast),
+    background-color var(--cb-transition-fast);
+
+  &:hover {
+    background-color: var(--cb-color-bg-hover);
+    color: var(--cb-color-danger);
+  }
+}
+
+.cb-like-btn--active {
+  color: var(--cb-color-danger);
+}
+
+.cb-like-icon {
+  font-size: var(--cb-font-size-base);
+  line-height: 1;
+}
+
+.cb-like-count {
+  font-size: var(--cb-font-size-sm);
+  min-width: 0;
+}
+
+// =============================================
+// Inline Edit
+// =============================================
+
+.cb-editor--edit {
+  margin-bottom: 0;
+
+  .cb-editor-inner {
+    border-color: var(--cb-color-primary);
+  }
+
+  .cb-editor-textarea {
+    min-height: 60px;
+  }
+}
+
+// =============================================
 // Badge
 // =============================================
 

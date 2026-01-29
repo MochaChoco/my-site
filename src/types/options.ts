@@ -56,6 +56,7 @@ export interface Messages {
   monthsAgo: string;
   yearsAgo: string;
   loginRequired: string;
+  like: string;
 }
 
 /**
@@ -94,6 +95,8 @@ export interface CommentBoxOptions {
   onCommentUpdate?: (comment: Comment) => void;
   onCommentDelete?: (commentId: string) => void;
   onReplyAdd?: (reply: Comment, parentId: string) => void;
+  onCommentLike?: (comment: Comment, liked: boolean) => void;
+  onDeleteConfirm?: (commentId: string, proceed: () => void) => void;
 }
 
 /**
@@ -119,4 +122,6 @@ export interface NormalizedOptions {
   onCommentUpdate: ((comment: Comment) => void) | null;
   onCommentDelete: ((commentId: string) => void) | null;
   onReplyAdd: ((reply: Comment, parentId: string) => void) | null;
+  onCommentLike: ((comment: Comment, liked: boolean) => void) | null;
+  onDeleteConfirm: ((commentId: string, proceed: () => void) => void) | null;
 }

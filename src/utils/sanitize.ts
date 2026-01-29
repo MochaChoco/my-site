@@ -31,3 +31,14 @@ export function processContent(content: string): string {
   const sanitized = sanitize(content);
   return nl2br(sanitized);
 }
+
+/**
+ * HTML attribute 값 이스케이프
+ */
+export function escapeAttr(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}

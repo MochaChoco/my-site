@@ -19,4 +19,5 @@ export const ko: Messages = {
   monthsAgo: '{months}개월 전',
   yearsAgo: '{years}년 전',
   loginRequired: '댓글을 작성하려면 로그인이 필요합니다.',
+  like: '좋아요',
 };

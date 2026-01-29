@@ -99,6 +99,7 @@ export const EVENTS = {
   REPLY_TOGGLE: 'reply:toggle',
   PAGE_CHANGE: 'page:change',
   STATE_CHANGE: 'state:change',
+  COMMENT_LIKE: 'comment:like',
 } as const;
 
 export type EventType = (typeof EVENTS)[keyof typeof EVENTS];

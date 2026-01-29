@@ -268,6 +268,20 @@
         onReplyAdd: (reply, parentId) => {
           console.log('New reply:', reply, 'to:', parentId);
         },
+        onCommentUpdate: (comment) => {
+          console.log('Comment updated:', comment);
+        },
+        onCommentDelete: (commentId) => {
+          console.log('Comment deleted:', commentId);
+        },
+        onCommentLike: (comment, liked) => {
+          console.log(liked ? 'Liked:' : 'Unliked:', comment.id, 'count:', comment.likeCount);
+        },
+        onDeleteConfirm: (commentId, proceed) => {
+          // 커스텀 삭제 확인 테스트
+          const confirmed = confirm(`댓글(${commentId})을 정말 삭제하시겠습니까? (커스텀 콜백)`);
+          if (confirmed) proceed();
+        },
         onError: (error) => {
           console.error('CommentBox error:', error);
         },

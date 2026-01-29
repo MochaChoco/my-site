@@ -21,6 +21,8 @@ export interface Comment {
   updatedAt: number;
   isDeleted: boolean;
   replyCount: number;
+  likeCount: number;
+  isLiked: boolean;
 }
 
 /**

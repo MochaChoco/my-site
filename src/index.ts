@@ -34,6 +34,7 @@ export { CommentBox } from './core/CommentBox';
 export type { CommentBoxInstance } from './core/CommentBox';
 export { EventEmitter, EVENTS } from './core/EventEmitter';
 export { MockAPI } from './api/MockAPI';
+export { HttpAPI } from './api/HttpAPI';
 
 // 유틸리티 내보내기 (선택적)
 export { sanitize, stripTags, nl2br, processContent } from './utils/sanitize';

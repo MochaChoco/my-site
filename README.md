@@ -7,6 +7,9 @@
 - **프레임워크 독립적**: React, Vue, Angular 등 어떤 프레임워크에서도 사용 가능
 - **TypeScript 지원**: 완전한 타입 정의 제공
 - **대댓글 지원**: 계층형 댓글 구조
+- **인라인 수정**: 댓글/대댓글을 제자리에서 수정 (전체 새로고침 없음)
+- **좋아요**: 댓글/대댓글 좋아요 토글 (부분 DOM 업데이트)
+- **커스텀 삭제 확인**: 기본 confirm() 또는 소비자 제공 콜백 사용
 - **다국어 지원**: 한국어, 영어 기본 제공
 - **테마 지원**: 라이트/다크 테마
 - **반응형**: 모바일 최적화
@@ -77,6 +80,29 @@ onUnmounted(() => {
 </script>
 ```
 
+### 좋아요 & 커스텀 삭제 확인
+
+```javascript
+CommentBox.init({
+  container: '#comment-box',
+  objectId: 'article-123',
+
+  // 좋아요 콜백
+  onCommentLike: (comment, liked) => {
+    console.log(liked ? '좋아요' : '좋아요 취소', comment.id);
+  },
+
+  // 커스텀 삭제 확인 (기본: browser confirm)
+  onDeleteConfirm: (commentId, proceed) => {
+    // 자체 모달/다이얼로그 표시
+    showCustomModal({
+      message: '정말 삭제하시겠습니까?',
+      onConfirm: () => proceed(),  // proceed() 호출 시 실제 삭제 실행
+    });
+  },
+});
+```
+
 ## 옵션
 
 ```typescript
@@ -115,6 +141,8 @@ interface CommentBoxOptions {
   onCommentUpdate?: (comment: Comment) => void;
   onCommentDelete?: (commentId: string) => void;
   onReplyAdd?: (reply: Comment, parentId: string) => void;
+  onCommentLike?: (comment: Comment, liked: boolean) => void;
+  onDeleteConfirm?: (commentId: string, proceed: () => void) => void;
 }
 ```
 
@@ -147,6 +175,10 @@ const unsubscribe = instance.on('comment:add', (comment) => {
   console.log('New comment:', comment);
 });
 
+instance.on('comment:like', ({ comment, liked }) => {
+  console.log(liked ? 'Liked' : 'Unliked', comment.id);
+});
+
 // 상태 조회
 const state = instance.getState();
 
@@ -169,7 +201,8 @@ ogq-comment-box/
 │   │   └── EventEmitter.ts      # 이벤트 시스템
 │   ├── api/                     # API 레이어
 │   │   ├── CommentAPI.ts        # 인터페이스 정의
-│   │   └── MockAPI.ts           # Mock 구현
+│   │   ├── MockAPI.ts           # Mock 구현 (메모리)
+│   │   └── HttpAPI.ts           # HTTP 구현 (서버 연동)
 │   ├── ui/
 │   │   ├── templates/           # DOM 템플릿
 │   │   └── styles/              # SCSS 스타일
@@ -248,6 +281,8 @@ async createComment(objectId: string, data: CreateCommentData): Promise<Comment>
     author: data.author || { id: 'anonymous', nickname: '익명' },
     createdAt: now,
     replyCount: 0,
+    likeCount: 0,
+    isLiked: false,
   };
 
   // 3) 메모리 배열 맨 앞에 추가
@@ -356,8 +391,12 @@ private renderList(): void {
         <span class="cb-author">익명</span>
         <span class="cb-time">오늘</span>
       </div>
-      <div class="cb-comment-content">안녕하세요!</div>
+      <div class="cb-comment-content" data-raw-content="안녕하세요!">안녕하세요!</div>
       <div class="cb-comment-footer">
+        <button class="cb-like-btn" data-comment-id="comment-100">
+          <span class="cb-like-icon">&#9825;</span>
+          <span class="cb-like-count"></span>
+        </button>
         <button class="cb-action-btn" data-action="reply">답글</button>
       </div>
     </div>
@@ -399,11 +438,87 @@ private renderList(): void {
 
 ---
 
-## 커스텀 API 연동
+## API 연동
 
-실제 백엔드 API와 연동하려면 `CommentAPI` 인터페이스를 구현합니다.
+### 내장 API 구현체
 
-### API 인터페이스
+| 클래스 | 설명 | 데이터 저장 |
+|--------|------|-------------|
+| `MockAPI` | 개발/데모용 Mock | 메모리 (페이지 새로고침 시 초기화) |
+| `HttpAPI` | HTTP 서버 연동 | 서버 (브라우저 간 공유, 영속적) |
+
+### HttpAPI 사용
+
+`HttpAPI`는 `CommentAPI` 인터페이스를 `fetch()`로 구현한 HTTP 클라이언트입니다.
+
+```typescript
+import CommentBox, { HttpAPI } from '@nom/comment-box';
+
+CommentBox.init({
+  container: '#comment-box',
+  objectId: 'article-123',
+  api: new HttpAPI('/api/comments'),
+});
+```
+
+`HttpAPI`는 다음 엔드포인트를 호출합니다:
+
+| 메서드 | HTTP 요청 |
+|--------|-----------|
+| `getComments()` | `GET /api/comments?objectId=...&page=0&pageSize=10&sort=latest` |
+| `createComment()` | `POST /api/comments` |
+| `updateComment()` | `PUT /api/comments/:id` |
+| `deleteComment()` | `DELETE /api/comments/:id` |
+| `getReplies()` | `GET /api/comments/:id/replies?page=0&pageSize=10` |
+| `createReply()` | `POST /api/comments/:id/replies` |
+| `likeComment()` | `POST /api/comments/:id/like` |
+| `unlikeComment()` | `POST /api/comments/:id/unlike` |
+
+### Nuxt 3 서버 API와 함께 사용 (로컬 테스트)
+
+nom-market-front에 Nuxt 서버 API 라우트와 JSON 파일 저장소를 구성하면, 서버 없이도 브라우저 간 데이터가 공유되는 테스트 환경을 만들 수 있습니다.
+
+```
+nom-market-front/src/server/
+├── data/comments.json           # 댓글 데이터 (JSON 파일)
+├── utils/commentStore.ts        # 파일 읽기/쓰기 유틸
+└── api/comments/
+    ├── index.get.ts             # GET  /api/comments
+    ├── index.post.ts            # POST /api/comments
+    ├── [id].put.ts              # PUT  /api/comments/:id
+    ├── [id].delete.ts           # DELETE /api/comments/:id
+    └── [id]/
+        ├── replies.get.ts       # GET  /api/comments/:id/replies
+        ├── replies.post.ts      # POST /api/comments/:id/replies
+        ├── like.post.ts         # POST /api/comments/:id/like
+        └── unlike.post.ts       # POST /api/comments/:id/unlike
+```
+
+```vue
+<!-- Vue 3 (Nuxt) 통합 예시 -->
+<script setup>
+let CommentBox = null;
+let HttpAPI = null;
+if (import.meta.client) {
+  const mod = await import('@nom/comment-box');
+  CommentBox = mod.default || mod.CommentBox;
+  HttpAPI = mod.HttpAPI;
+  await import('@nom/comment-box/style.css');
+}
+
+function initCommentBox() {
+  CommentBox.init({
+    container: '#comment-box',
+    objectId: 'article-123',
+    api: HttpAPI ? new HttpAPI('/api/comments') : undefined,
+  });
+}
+</script>
+```
+
+### 커스텀 API 구현
+
+다른 백엔드를 사용하려면 `CommentAPI` 인터페이스를 직접 구현합니다.
 
 ```typescript
 interface CommentAPI {
@@ -413,52 +528,23 @@ interface CommentAPI {
   deleteComment(commentId: string): Promise<void>;
   getReplies(parentId: string, params: GetRepliesParams): Promise<GetRepliesResponse>;
   createReply(parentId: string, data: CreateCommentData): Promise<Comment>;
+  likeComment(commentId: string): Promise<Comment>;
+  unlikeComment(commentId: string): Promise<Comment>;
 }
 ```
 
-### HttpAPI 구현 예시
-
 ```typescript
-class HttpAPI implements CommentAPI {
-  private baseUrl: string;
+import CommentBox from '@nom/comment-box';
+import type { CommentAPI } from '@nom/comment-box';
 
-  constructor(baseUrl: string) {
-    this.baseUrl = baseUrl;
-  }
-
-  async getComments(params: GetCommentsParams): Promise<GetCommentsResponse> {
-    const url = new URL(`${this.baseUrl}/comments/${params.objectId}`);
-    url.searchParams.set('page', String(params.page));
-    url.searchParams.set('pageSize', String(params.pageSize));
-
-    const response = await fetch(url.toString());
-    return response.json();
-  }
-
-  async createComment(objectId: string, data: CreateCommentData): Promise<Comment> {
-    const response = await fetch(`${this.baseUrl}/comments/${objectId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    return response.json();
-  }
-
-  // ... 나머지 메서드 구현
+class MyCustomAPI implements CommentAPI {
+  // ... 인터페이스 메서드 구현
 }
-```
-
-### 사용 예시
-
-```typescript
-import CommentBox, { HttpAPI } from '@nom/comment-box';
-
-const api = new HttpAPI('/api');
 
 CommentBox.init({
   container: '#comment-box',
   objectId: 'article-123',
-  api,  // 커스텀 API 주입
+  api: new MyCustomAPI(),
 });
 ```
 

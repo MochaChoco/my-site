@@ -17,6 +17,7 @@ export class MockAPI implements CommentAPI {
   private comments: Comment[] = [];
   private delay: number;
   private idCounter: number = 1;
+  private likedComments: Set<string> = new Set();
 
   constructor(initialData?: Comment[], delay: number = 300) {
     this.comments = initialData || this.generateMockData();
@@ -34,102 +35,7 @@ export class MockAPI implements CommentAPI {
   }
 
   private generateMockData(): Comment[] {
-    const now = Math.floor(Date.now() / 1000);
-    return [
-      {
-        id: 'comment-1',
-        objectId: 'test-object',
-        parentId: null,
-        content: '첫 번째 댓글입니다. 이 댓글 모듈은 정말 유용하네요!',
-        author: {
-          id: 'user-1',
-          nickname: '테스트유저1',
-          profileUrl: 'https://via.placeholder.com/40',
-          isManager: false,
-        },
-        createdAt: now - 3600,
-        updatedAt: now - 3600,
-        isDeleted: false,
-        replyCount: 2,
-      },
-      {
-        id: 'comment-2',
-        objectId: 'test-object',
-        parentId: null,
-        content: '두 번째 댓글입니다.',
-        author: {
-          id: 'user-2',
-          nickname: '관리자',
-          profileUrl: 'https://via.placeholder.com/40',
-          isManager: true,
-        },
-        createdAt: now - 7200,
-        updatedAt: now - 7200,
-        isDeleted: false,
-        replyCount: 0,
-      },
-      {
-        id: 'comment-3',
-        objectId: 'test-object',
-        parentId: null,
-        content: '세 번째 댓글입니다. 좋은 하루 되세요!',
-        author: {
-          id: 'user-3',
-          nickname: '일반사용자',
-          isManager: false,
-        },
-        createdAt: now - 86400,
-        updatedAt: now - 86400,
-        isDeleted: false,
-        replyCount: 1,
-      },
-      // 대댓글들
-      {
-        id: 'reply-1',
-        objectId: 'test-object',
-        parentId: 'comment-1',
-        content: '첫 번째 댓글에 대한 답글입니다.',
-        author: {
-          id: 'user-2',
-          nickname: '관리자',
-          isManager: true,
-        },
-        createdAt: now - 1800,
-        updatedAt: now - 1800,
-        isDeleted: false,
-        replyCount: 0,
-      },
-      {
-        id: 'reply-2',
-        objectId: 'test-object',
-        parentId: 'comment-1',
-        content: '저도 동의합니다!',
-        author: {
-          id: 'user-3',
-          nickname: '일반사용자',
-          isManager: false,
-        },
-        createdAt: now - 900,
-        updatedAt: now - 900,
-        isDeleted: false,
-        replyCount: 0,
-      },
-      {
-        id: 'reply-3',
-        objectId: 'test-object',
-        parentId: 'comment-3',
-        content: '감사합니다!',
-        author: {
-          id: 'user-1',
-          nickname: '테스트유저1',
-          isManager: false,
-        },
-        createdAt: now - 43200,
-        updatedAt: now - 43200,
-        isDeleted: false,
-        replyCount: 0,
-      },
-    ];
+    return [];
   }
 
   async getComments(params: GetCommentsParams): Promise<GetCommentsResponse> {
@@ -149,7 +55,10 @@ export class MockAPI implements CommentAPI {
 
     const start = params.page * params.pageSize;
     const end = start + params.pageSize;
-    const paginated = sorted.slice(start, end);
+    const paginated = sorted.slice(start, end).map((c) => ({
+      ...c,
+      isLiked: this.likedComments.has(c.id),
+    }));
 
     return {
       comments: paginated,
@@ -180,6 +89,8 @@ export class MockAPI implements CommentAPI {
       updatedAt: now,
       isDeleted: false,
       replyCount: 0,
+      likeCount: 0,
+      isLiked: false,
     };
 
     this.comments.unshift(newComment);
@@ -236,7 +147,10 @@ export class MockAPI implements CommentAPI {
 
     const start = params.page * params.pageSize;
     const end = start + params.pageSize;
-    const paginated = sorted.slice(start, end);
+    const paginated = sorted.slice(start, end).map((c) => ({
+      ...c,
+      isLiked: this.likedComments.has(c.id),
+    }));
 
     return {
       replies: paginated,
@@ -271,6 +185,8 @@ export class MockAPI implements CommentAPI {
       updatedAt: now,
       isDeleted: false,
       replyCount: 0,
+      likeCount: 0,
+      isLiked: false,
     };
 
     this.comments.push(newReply);
@@ -279,12 +195,45 @@ export class MockAPI implements CommentAPI {
     return newReply;
   }
 
+  async likeComment(commentId: string): Promise<Comment> {
+    await this.simulateDelay();
+
+    const comment = this.comments.find((c) => c.id === commentId);
+    if (!comment) {
+      throw new Error(`Comment not found: ${commentId}`);
+    }
+
+    if (!this.likedComments.has(commentId)) {
+      this.likedComments.add(commentId);
+      comment.likeCount++;
+    }
+
+    return { ...comment, isLiked: true };
+  }
+
+  async unlikeComment(commentId: string): Promise<Comment> {
+    await this.simulateDelay();
+
+    const comment = this.comments.find((c) => c.id === commentId);
+    if (!comment) {
+      throw new Error(`Comment not found: ${commentId}`);
+    }
+
+    if (this.likedComments.has(commentId)) {
+      this.likedComments.delete(commentId);
+      comment.likeCount = Math.max(0, comment.likeCount - 1);
+    }
+
+    return { ...comment, isLiked: false };
+  }
+
   /**
    * Mock 데이터 리셋 (테스트용)
    */
   reset(): void {
     this.comments = this.generateMockData();
     this.idCounter = 100;
+    this.likedComments.clear();
   }
 
   /**

@@ -19,4 +19,5 @@ export const en: Messages = {
   monthsAgo: '{months} months ago',
   yearsAgo: '{years} years ago',
   loginRequired: 'Please log in to write a comment.',
+  like: 'Like',
 };

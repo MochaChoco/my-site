@@ -54,4 +54,14 @@ export interface CommentAPI {
     parentId: string,
     data: CreateCommentData
   ): Promise<Comment>;
+
+  /**
+   * 댓글 좋아요
+   */
+  likeComment(commentId: string): Promise<Comment>;
+
+  /**
+   * 댓글 좋아요 취소
+   */
+  unlikeComment(commentId: string): Promise<Comment>;
 }

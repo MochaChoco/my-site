@@ -53,7 +53,7 @@
 .cb-editor-inner {
   border: 1px solid var(--cb-color-border);
   border-radius: var(--cb-radius-md);
-  overflow: hidden;
+  overflow: visible;
   transition: border-color var(--cb-transition-fast);
 
   &:focus-within {
@@ -66,6 +66,7 @@
   min-height: 80px;
   padding: var(--cb-spacing-md);
   border: none;
+  border-radius: var(--cb-radius-md) var(--cb-radius-md) 0 0;
   resize: vertical;
   font-family: inherit;
   font-size: inherit;
@@ -87,6 +88,7 @@
   justify-content: flex-end;
   gap: var(--cb-spacing-sm);
   padding: var(--cb-spacing-sm) var(--cb-spacing-md);
+  border-radius: 0 0 var(--cb-radius-md) var(--cb-radius-md);
   background-color: var(--cb-color-bg-secondary);
 }
 

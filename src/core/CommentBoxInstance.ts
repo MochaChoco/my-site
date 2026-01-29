@@ -1,12 +1,14 @@
 import type { CommentAPI } from '../api/CommentAPI';
 import type { Comment } from '../types/comment';
 import type { NormalizedOptions } from '../types/options';
+import type { StickerData } from '../types/sticker';
 import { EventEmitter, EVENTS } from './EventEmitter';
 import { formatMessage } from '../i18n';
 import {
   containerTemplate,
   headerTemplate,
   editorTemplate,
+  stickerPopupTemplate,
   commentItemTemplate,
   replyItemTemplate,
   emptyTemplate,
@@ -17,6 +19,7 @@ import {
 import {
   createElement,
   delegate,
+  addEvent,
   empty,
   show,
   hide,
@@ -33,6 +36,7 @@ interface State {
   expandedReplies: Set<string>;
   replyEditors: Set<string>;
   editingComment: string | null;
+  stickerPopupVisible: boolean;
 }
 
 /**
@@ -73,6 +77,7 @@ export class CommentBoxInstance {
       expandedReplies: new Set(),
       replyEditors: new Set(),
       editingComment: null,
+      stickerPopupVisible: false,
     };
 
     this.init();
@@ -218,6 +223,88 @@ export class CommentBoxInstance {
       }
     );
     this.cleanupFunctions.push(cleanupPage);
+
+    // 스티커 버튼 클릭 → 팝업 토글
+    const cleanupStickerBtn = delegate(
+      this.container,
+      `.${prefix}-sticker-btn`,
+      'click',
+      (_, target) => {
+        const anchor = target.closest(`.${prefix}-sticker-popup-anchor`) as HTMLElement;
+        if (anchor) {
+          this.toggleStickerPopup(anchor);
+        }
+      }
+    );
+    this.cleanupFunctions.push(cleanupStickerBtn);
+
+    // 스티커 그룹 탭 클릭
+    const cleanupStickerTab = delegate(
+      this.container,
+      `.${prefix}-sticker-tab`,
+      'click',
+      (_, target) => {
+        this.handleStickerTabClick(target as HTMLElement);
+      }
+    );
+    this.cleanupFunctions.push(cleanupStickerTab);
+
+    // 스티커 아이템 클릭 → 미리보기
+    const cleanupStickerItem = delegate(
+      this.container,
+      `.${prefix}-sticker-item`,
+      'click',
+      (_, target) => {
+        this.handleStickerSelect(target as HTMLElement);
+      }
+    );
+    this.cleanupFunctions.push(cleanupStickerItem);
+
+    // 스티커 미리보기 취소
+    const cleanupStickerCancel = delegate(
+      this.container,
+      `.${prefix}-sticker-preview-cancel`,
+      'click',
+      (_, target) => {
+        const editor = target.closest(`.${prefix}-editor`) as HTMLElement;
+        if (editor) {
+          this.clearStickerPreview(editor);
+        }
+      }
+    );
+    this.cleanupFunctions.push(cleanupStickerCancel);
+
+    // 스티커 구매 버튼 클릭
+    const cleanupStickerPurchase = delegate(
+      this.container,
+      `.${prefix}-sticker-purchase-btn`,
+      'click',
+      () => {
+        this.options.sticker?.onStickerPurchase?.();
+        this.closeStickerPopup();
+      }
+    );
+    this.cleanupFunctions.push(cleanupStickerPurchase);
+
+    // 팝업 외부 클릭 시 닫기
+    const cleanupOutsideClick = addEvent(
+      document.body as HTMLElement,
+      'click',
+      (e: Event) => {
+        if (!this.state.stickerPopupVisible) return;
+        const popup = this.container.querySelector(`.${prefix}-sticker-popup`);
+        const btn = this.container.querySelector(`.${prefix}-sticker-btn`);
+        if (
+          popup &&
+          !popup.contains(e.target as Node) &&
+          btn &&
+          !btn.contains(e.target as Node)
+        ) {
+          this.closeStickerPopup();
+        }
+      }
+    );
+    this.cleanupFunctions.push(cleanupOutsideClick);
   }
 
   private async loadComments(): Promise<void> {
@@ -267,7 +354,7 @@ export class CommentBoxInstance {
 
   private renderEditor(): void {
     if (!this.elements.editorWrapper) return;
-    const { cssPrefix, messages, auth } = this.options;
+    const { cssPrefix, messages, auth, sticker } = this.options;
 
     // 로그인 확인
     if (auth && !auth.isLoggedIn()) {
@@ -278,7 +365,9 @@ export class CommentBoxInstance {
       return;
     }
 
-    this.elements.editorWrapper.innerHTML = editorTemplate(cssPrefix, messages);
+    this.elements.editorWrapper.innerHTML = editorTemplate(cssPrefix, messages, {
+      stickerEnabled: sticker?.enabled ?? false,
+    });
   }
 
   private renderList(): void {
@@ -332,9 +421,24 @@ export class CommentBoxInstance {
     const textarea = editor.querySelector(
       `.${cssPrefix}-editor-textarea`
     ) as HTMLTextAreaElement;
-    const content = textarea?.value.trim();
+    const preview = editor.querySelector(
+      `.${cssPrefix}-sticker-preview`
+    ) as HTMLElement;
 
-    if (!content) return;
+    // 스티커 미리보기가 표시 중인지 확인
+    const stickerData: StickerData | undefined =
+      preview && !preview.hasAttribute('hidden')
+        ? {
+            packId: preview.dataset.stickerPackId!,
+            stickerId: preview.dataset.stickerId!,
+            imageUrl: preview.dataset.stickerImageUrl!,
+          }
+        : undefined;
+
+    const content = stickerData ? '' : (textarea?.value.trim() || '');
+
+    // 텍스트도 스티커도 없으면 무시
+    if (!content && !stickerData) return;
 
     // 로그인 확인
     if (auth && !auth.isLoggedIn()) {
@@ -359,6 +463,7 @@ export class CommentBoxInstance {
         const userInfo = auth?.getUserInfo();
         const reply = await this.api.createReply(parentId, {
           content,
+          sticker: stickerData,
           author: userInfo
             ? {
                 id: userInfo.id,
@@ -374,6 +479,7 @@ export class CommentBoxInstance {
         const userInfo = auth?.getUserInfo();
         const comment = await this.api.createComment(objectId, {
           content,
+          sticker: stickerData,
           author: userInfo
             ? {
                 id: userInfo.id,
@@ -389,7 +495,8 @@ export class CommentBoxInstance {
 
       // 새로고침
       await this.loadComments();
-      textarea.value = '';
+      if (textarea) textarea.value = '';
+      this.clearStickerPreview(editor);
 
       // 답글 에디터인 경우 숨기기
       if (isReply && parentId) {
@@ -427,7 +534,7 @@ export class CommentBoxInstance {
   }
 
   private showReplyEditor(parentId: string): void {
-    const { cssPrefix, messages } = this.options;
+    const { cssPrefix, messages, sticker } = this.options;
     const wrapper = this.container.querySelector(
       `.${cssPrefix}-reply-editor-wrapper[data-parent-id="${parentId}"]`
     ) as HTMLElement;
@@ -437,6 +544,7 @@ export class CommentBoxInstance {
     wrapper.innerHTML = editorTemplate(cssPrefix, messages, {
       mode: 'reply',
       parentId,
+      stickerEnabled: sticker?.enabled ?? false,
     });
     show(wrapper);
 
@@ -691,6 +799,111 @@ export class CommentBoxInstance {
     // 스크롤 이동
     scrollToElement(this.container);
     this.emitter.emit(EVENTS.PAGE_CHANGE, page);
+  }
+
+  // =============================================
+  // 스티커 관련 메서드
+  // =============================================
+
+  private toggleStickerPopup(anchor: HTMLElement): void {
+    const { cssPrefix, sticker, messages } = this.options;
+    if (!sticker) return;
+
+    if (this.state.stickerPopupVisible) {
+      this.closeStickerPopup();
+      return;
+    }
+
+    // 기존 팝업 제거
+    const existingPopup = anchor.querySelector(`.${cssPrefix}-sticker-popup`);
+    if (existingPopup) existingPopup.remove();
+
+    // 팝업 생성 및 삽입
+    const popupHtml = stickerPopupTemplate(cssPrefix, sticker.groups || [], messages);
+    anchor.insertAdjacentHTML('beforeend', popupHtml);
+
+    this.setState({ stickerPopupVisible: true });
+  }
+
+  private closeStickerPopup(): void {
+    const { cssPrefix } = this.options;
+    const popup = this.container.querySelector(`.${cssPrefix}-sticker-popup`);
+    if (popup) popup.remove();
+    this.setState({ stickerPopupVisible: false });
+  }
+
+  private handleStickerTabClick(tabEl: HTMLElement): void {
+    const { cssPrefix } = this.options;
+    const popup = tabEl.closest(`.${cssPrefix}-sticker-popup`);
+    if (!popup) return;
+
+    const groupId = tabEl.dataset.groupId;
+
+    // 활성 탭 업데이트
+    popup.querySelectorAll(`.${cssPrefix}-sticker-tab`).forEach((tab) => {
+      tab.classList.remove(`${cssPrefix}-sticker-tab--active`);
+    });
+    tabEl.classList.add(`${cssPrefix}-sticker-tab--active`);
+
+    // 패널 전환
+    popup.querySelectorAll(`.${cssPrefix}-sticker-panel`).forEach((panel) => {
+      const panelEl = panel as HTMLElement;
+      if (panelEl.dataset.groupId === groupId) {
+        show(panelEl);
+      } else {
+        hide(panelEl);
+      }
+    });
+  }
+
+  private handleStickerSelect(stickerEl: HTMLElement): void {
+    const { cssPrefix } = this.options;
+    const packId = stickerEl.dataset.packId!;
+    const stickerId = stickerEl.dataset.stickerId!;
+    const imageUrl = stickerEl.dataset.imageUrl!;
+
+    // 팝업이 속한 에디터 찾기
+    const anchor = stickerEl.closest(`.${cssPrefix}-sticker-popup-anchor`);
+    const editor = anchor?.closest(`.${cssPrefix}-editor`) as HTMLElement;
+    if (!editor) return;
+
+    // textarea 숨기고 미리보기 표시
+    const textarea = editor.querySelector(`.${cssPrefix}-editor-textarea`) as HTMLTextAreaElement;
+    const preview = editor.querySelector(`.${cssPrefix}-sticker-preview`) as HTMLElement;
+    const previewImg = editor.querySelector(`.${cssPrefix}-sticker-preview-img`) as HTMLImageElement;
+
+    if (textarea) {
+      hide(textarea);
+      textarea.disabled = true;
+    }
+    if (preview && previewImg) {
+      previewImg.src = imageUrl;
+      preview.dataset.stickerPackId = packId;
+      preview.dataset.stickerId = stickerId;
+      preview.dataset.stickerImageUrl = imageUrl;
+      show(preview);
+    }
+
+    this.closeStickerPopup();
+  }
+
+  private clearStickerPreview(editor: HTMLElement): void {
+    const { cssPrefix } = this.options;
+    const textarea = editor.querySelector(`.${cssPrefix}-editor-textarea`) as HTMLElement;
+    const preview = editor.querySelector(`.${cssPrefix}-sticker-preview`) as HTMLElement;
+
+    if (preview) {
+      hide(preview);
+      delete preview.dataset.stickerPackId;
+      delete preview.dataset.stickerId;
+      delete preview.dataset.stickerImageUrl;
+      const img = preview.querySelector(`.${cssPrefix}-sticker-preview-img`) as HTMLImageElement;
+      if (img) img.src = '';
+    }
+    if (textarea) {
+      show(textarea);
+      (textarea as HTMLTextAreaElement).disabled = false;
+    }
   }
 
   private setState(partial: Partial<State>): void {

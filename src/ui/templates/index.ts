@@ -1,5 +1,6 @@
 import type { Comment } from '../../types/comment';
 import type { Messages } from '../../types/options';
+import type { StickerGroup } from '../../types/sticker';
 import { formatMessage } from '../../i18n';
 import { timeAgo } from '../../utils/datetime';
 import { processContent, escapeAttr } from '../../utils/sanitize';
@@ -45,22 +46,43 @@ export function editorTemplate(
     initialValue?: string;
     parentId?: string;
     commentId?: string;
+    stickerEnabled?: boolean;
   } = {}
 ): string {
-  const { mode = 'create', initialValue = '', parentId, commentId } = options;
+  const { mode = 'create', initialValue = '', parentId, commentId, stickerEnabled = false } = options;
   const parentAttr = parentId ? `data-parent-id="${parentId}"` : '';
   const commentIdAttr = commentId ? `data-comment-id="${commentId}"` : '';
   const modeClass = mode !== 'create' ? `${prefix}-editor--${mode}` : '';
+  const showStickerBtn = stickerEnabled && mode !== 'edit';
 
   return `
     <div class="${prefix}-editor ${modeClass}" ${parentAttr} ${commentIdAttr}>
       <div class="${prefix}-editor-inner">
+        ${showStickerBtn ? `
+          <div class="${prefix}-sticker-preview" hidden style="display:none">
+            <img class="${prefix}-sticker-preview-img" src="" alt="sticker" />
+            <button type="button" class="${prefix}-sticker-preview-cancel ${prefix}-btn ${prefix}-btn--text">${messages.stickerPreviewCancel}</button>
+          </div>
+        ` : ''}
         <textarea
           class="${prefix}-editor-textarea"
           placeholder="${messages.placeholder}"
           rows="3"
         >${initialValue}</textarea>
         <div class="${prefix}-editor-actions">
+          ${showStickerBtn ? `
+            <div class="${prefix}-sticker-popup-anchor">
+              <button type="button" class="${prefix}-sticker-btn" title="${messages.stickerButton}">
+                <svg class="${prefix}-sticker-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+                  <line x1="9" y1="9" x2="9.01" y2="9"/>
+                  <line x1="15" y1="9" x2="15.01" y2="9"/>
+                </svg>
+              </button>
+            </div>
+          ` : ''}
+          <div class="${prefix}-editor-actions-spacer"></div>
           ${
             mode !== 'create'
               ? `<button type="button" class="${prefix}-editor-cancel ${prefix}-btn ${prefix}-btn--text">${messages.cancel}</button>`
@@ -68,6 +90,66 @@ export function editorTemplate(
           }
           <button type="button" class="${prefix}-editor-submit ${prefix}-btn ${prefix}-btn--primary">${messages.submit}</button>
         </div>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * 스티커 팝업 템플릿
+ */
+export function stickerPopupTemplate(
+  prefix: string,
+  groups: StickerGroup[],
+  messages: Messages
+): string {
+  if (groups.length === 0) {
+    return `
+      <div class="${prefix}-sticker-popup">
+        <div class="${prefix}-sticker-popup-empty">
+          <p class="${prefix}-sticker-popup-empty-text">${messages.stickerPurchase}</p>
+          <button type="button" class="${prefix}-sticker-purchase-btn ${prefix}-btn ${prefix}-btn--primary">
+            ${messages.stickerPurchase}
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  const tabs = groups.map((group, index) => `
+    <button type="button"
+      class="${prefix}-sticker-tab ${index === 0 ? `${prefix}-sticker-tab--active` : ''}"
+      data-group-id="${group.id}"
+      title="${group.name}">
+      <img src="${group.thumbnail}" alt="${group.name}" class="${prefix}-sticker-tab-img" />
+    </button>
+  `).join('');
+
+  const panels = groups.map((group, index) => `
+    <div class="${prefix}-sticker-panel"
+      data-group-id="${group.id}"
+      ${index !== 0 ? 'hidden' : ''}>
+      <div class="${prefix}-sticker-grid">
+        ${group.stickers.map(sticker => `
+          <button type="button"
+            class="${prefix}-sticker-item"
+            data-sticker-id="${sticker.id}"
+            data-pack-id="${group.id}"
+            data-image-url="${sticker.imageUrl}">
+            <img src="${sticker.imageUrl}" alt="sticker" class="${prefix}-sticker-item-img" loading="lazy" />
+          </button>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+
+  return `
+    <div class="${prefix}-sticker-popup">
+      <div class="${prefix}-sticker-tabs">
+        ${tabs}
+      </div>
+      <div class="${prefix}-sticker-panels">
+        ${panels}
       </div>
     </div>
   `;
@@ -86,7 +168,10 @@ export function commentItemTemplate(
   } = {}
 ): string {
   const { isOwner = false, showManagerBadge = false } = options;
-  const content = processContent(comment.content);
+  const isSticker = !!comment.sticker;
+  const content = isSticker
+    ? `<img src="${comment.sticker!.imageUrl}" alt="sticker" class="${prefix}-sticker-comment-img" />`
+    : processContent(comment.content);
   const time = timeAgo(comment.createdAt, messages);
   const managerBadge =
     showManagerBadge && comment.author.isManager
@@ -98,9 +183,11 @@ export function commentItemTemplate(
 
   const ownerActions = isOwner
     ? `
-      <button type="button" class="${prefix}-action-btn" data-action="edit" data-comment-id="${comment.id}">
-        ${messages.edit}
-      </button>
+      ${!isSticker ? `
+        <button type="button" class="${prefix}-action-btn" data-action="edit" data-comment-id="${comment.id}">
+          ${messages.edit}
+        </button>
+      ` : ''}
       <button type="button" class="${prefix}-action-btn ${prefix}-action-btn--danger" data-action="delete" data-comment-id="${comment.id}">
         ${messages.delete}
       </button>
@@ -163,7 +250,10 @@ export function replyItemTemplate(
   } = {}
 ): string {
   const { isOwner = false, showManagerBadge = false } = options;
-  const content = processContent(reply.content);
+  const isSticker = !!reply.sticker;
+  const content = isSticker
+    ? `<img src="${reply.sticker!.imageUrl}" alt="sticker" class="${prefix}-sticker-comment-img" />`
+    : processContent(reply.content);
   const time = timeAgo(reply.createdAt, messages);
   const managerBadge =
     showManagerBadge && reply.author.isManager
@@ -175,9 +265,11 @@ export function replyItemTemplate(
 
   const ownerActions = isOwner
     ? `
-      <button type="button" class="${prefix}-action-btn" data-action="edit" data-comment-id="${reply.id}">
-        ${messages.edit}
-      </button>
+      ${!isSticker ? `
+        <button type="button" class="${prefix}-action-btn" data-action="edit" data-comment-id="${reply.id}">
+          ${messages.edit}
+        </button>
+      ` : ''}
       <button type="button" class="${prefix}-action-btn ${prefix}-action-btn--danger" data-action="delete" data-comment-id="${reply.id}">
         ${messages.delete}
       </button>

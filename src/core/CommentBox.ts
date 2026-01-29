@@ -93,6 +93,13 @@ class CommentBoxManager {
       cssPrefix: options.cssPrefix || 'cb',
       locale,
       messages: { ...defaultMessages, ...options.messages },
+      sticker: options.sticker
+        ? {
+            enabled: options.sticker.enabled,
+            groups: options.sticker.groups || [],
+            onStickerPurchase: options.sticker.onStickerPurchase,
+          }
+        : null,
       auth: options.auth || null,
       onReady: options.onReady || null,
       onError: options.onError || null,

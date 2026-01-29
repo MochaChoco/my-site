@@ -20,4 +20,7 @@ export const ko: Messages = {
   yearsAgo: '{years}년 전',
   loginRequired: '댓글을 작성하려면 로그인이 필요합니다.',
   like: '좋아요',
+  stickerButton: '스티커',
+  stickerPurchase: '스티커를 구매해보세요',
+  stickerPreviewCancel: '취소',
 };

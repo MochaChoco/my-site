@@ -9,6 +9,7 @@
 - **대댓글 지원**: 계층형 댓글 구조
 - **인라인 수정**: 댓글/대댓글을 제자리에서 수정 (전체 새로고침 없음)
 - **좋아요**: 댓글/대댓글 좋아요 토글 (부분 DOM 업데이트)
+- **스티커 지원**: 스티커 단독 전송, 그룹별 팝업, 미리보기 후 전송
 - **커스텀 삭제 확인**: 기본 confirm() 또는 소비자 제공 콜백 사용
 - **다국어 지원**: 한국어, 영어 기본 제공
 - **테마 지원**: 라이트/다크 테마
@@ -80,6 +81,39 @@ onUnmounted(() => {
 </script>
 ```
 
+### 스티커 기능
+
+```javascript
+CommentBox.init({
+  container: '#comment-box',
+  objectId: 'article-123',
+  sticker: {
+    enabled: true,
+    groups: [
+      {
+        id: 'pack-1',
+        name: '기본 스티커',
+        thumbnail: '/stickers/pack1/thumb.png',
+        stickers: [
+          { id: 'sticker-1', imageUrl: '/stickers/pack1/001.png' },
+          { id: 'sticker-2', imageUrl: '/stickers/pack1/002.png' },
+        ],
+      },
+    ],
+    // 스티커 그룹이 비어있을 때 호출되는 콜백
+    onStickerPurchase: () => {
+      window.open('/sticker-store');
+    },
+  },
+});
+```
+
+**스티커 동작 방식:**
+- 스티커는 텍스트와 혼합 불가 (단독 전송)
+- 스티커 선택 시 입력창에 미리보기 표시 → 등록 버튼으로 전송
+- 스티커 댓글은 수정 불가 (삭제만 가능)
+- `sticker.groups`가 빈 배열이면 "스티커를 구매해보세요" 안내 + `onStickerPurchase` 콜백 호출
+
 ### 좋아요 & 커스텀 삭제 확인
 
 ```javascript
@@ -126,6 +160,13 @@ interface CommentBoxOptions {
 
   // 다국어
   locale?: 'ko' | 'en';             // 언어 (기본: ko)
+
+  // 스티커
+  sticker?: {
+    enabled: boolean;                // 스티커 기능 on/off
+    groups: StickerGroup[];          // 스티커 그룹 목록
+    onStickerPurchase?: () => void;  // 빈 그룹 시 구매 콜백
+  };
 
   // 인증
   auth?: {
@@ -211,7 +252,7 @@ ogq-comment-box/
 │   │   ├── datetime.ts          # 시간 포맷
 │   │   └── dom.ts               # DOM 헬퍼
 │   ├── i18n/                    # 다국어 (ko, en)
-│   ├── types/                   # TypeScript 타입
+│   ├── types/                   # TypeScript 타입 (sticker.ts 포함)
 │   └── index.ts                 # 엔트리포인트
 ├── dist/                        # 빌드 결과물
 ├── examples/                    # 데모

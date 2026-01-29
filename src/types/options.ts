@@ -1,5 +1,6 @@
 import type { Comment } from './comment';
 import type { CommentAPI } from '../api/CommentAPI';
+import type { StickerConfig } from './sticker';
 
 /**
  * UI 구성요소 타입
@@ -57,6 +58,9 @@ export interface Messages {
   yearsAgo: string;
   loginRequired: string;
   like: string;
+  stickerButton: string;
+  stickerPurchase: string;
+  stickerPreviewCancel: string;
 }
 
 /**
@@ -84,6 +88,9 @@ export interface CommentBoxOptions {
   // 다국어
   locale?: Locale;
   messages?: Partial<Messages>;
+
+  // 스티커
+  sticker?: StickerConfig;
 
   // 인증
   auth?: AuthConfig;
@@ -115,6 +122,7 @@ export interface NormalizedOptions {
   cssPrefix: string;
   locale: Locale;
   messages: Messages;
+  sticker: StickerConfig | null;
   auth: AuthConfig | null;
   onReady: (() => void) | null;
   onError: ((error: Error) => void) | null;

@@ -50,6 +50,21 @@
     height: 28px;
     font-size: 12px;
   }
+
+  .cb-sticker-popup {
+    width: 280px;
+    max-height: 300px;
+  }
+
+  .cb-sticker-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .cb-sticker-preview-img,
+  .cb-sticker-comment-img {
+    max-width: 100px;
+    max-height: 100px;
+  }
 }
 
 // =============================================

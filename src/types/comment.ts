@@ -1,3 +1,5 @@
+import type { StickerData } from './sticker';
+
 /**
  * 댓글 작성자 정보
  */
@@ -16,6 +18,7 @@ export interface Comment {
   objectId: string;
   parentId: string | null;
   content: string;
+  sticker?: StickerData;
   author: CommentAuthor;
   createdAt: number;
   updatedAt: number;
@@ -30,6 +33,7 @@ export interface Comment {
  */
 export interface CreateCommentData {
   content: string;
+  sticker?: StickerData;
   author?: CommentAuthor;
 }
 

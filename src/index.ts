@@ -27,6 +27,13 @@ export type {
   Messages,
 } from './types/options';
 
+export type {
+  Sticker,
+  StickerGroup,
+  StickerConfig,
+  StickerData,
+} from './types/sticker';
+
 export type { CommentAPI } from './api/CommentAPI';
 
 // 클래스 및 유틸리티 내보내기

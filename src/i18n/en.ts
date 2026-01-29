@@ -20,4 +20,7 @@ export const en: Messages = {
   yearsAgo: '{years} years ago',
   loginRequired: 'Please log in to write a comment.',
   like: 'Like',
+  stickerButton: 'Sticker',
+  stickerPurchase: 'Get stickers',
+  stickerPreviewCancel: 'Cancel',
 };

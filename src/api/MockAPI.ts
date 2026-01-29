@@ -80,6 +80,7 @@ export class MockAPI implements CommentAPI {
       objectId,
       parentId: null,
       content: data.content,
+      ...(data.sticker ? { sticker: data.sticker } : {}),
       author: data.author || {
         id: 'anonymous',
         nickname: '익명',
@@ -176,6 +177,7 @@ export class MockAPI implements CommentAPI {
       objectId: parent.objectId,
       parentId,
       content: data.content,
+      ...(data.sticker ? { sticker: data.sticker } : {}),
       author: data.author || {
         id: 'anonymous',
         nickname: '익명',

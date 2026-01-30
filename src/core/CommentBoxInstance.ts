@@ -293,15 +293,17 @@ export class CommentBoxInstance {
       (e: Event) => {
         if (!this.state.stickerPopupVisible) return;
         const popup = this.container.querySelector(`.${prefix}-sticker-popup`);
-        const btn = this.container.querySelector(`.${prefix}-sticker-btn`);
-        if (
-          popup &&
-          !popup.contains(e.target as Node) &&
-          btn &&
-          !btn.contains(e.target as Node)
-        ) {
-          this.closeStickerPopup();
+        const target = e.target as Node;
+        if (!popup) return;
+        if (popup.contains(target)) return;
+
+        // 모든 스티커 버튼 확인 (메인/답글/수정 에디터)
+        const btns = this.container.querySelectorAll(`.${prefix}-sticker-btn`);
+        for (const btn of btns) {
+          if (btn.contains(target)) return;
         }
+
+        this.closeStickerPopup();
       }
     );
     this.cleanupFunctions.push(cleanupOutsideClick);
@@ -646,7 +648,7 @@ export class CommentBoxInstance {
   }
 
   private startEdit(commentId: string): void {
-    const { cssPrefix, messages } = this.options;
+    const { cssPrefix, messages, sticker } = this.options;
 
     // 이미 수정 중인 댓글이 있으면 먼저 취소
     if (this.state.editingComment) {
@@ -683,6 +685,7 @@ export class CommentBoxInstance {
       mode: 'edit',
       initialValue: rawContent,
       commentId,
+      stickerEnabled: sticker?.enabled ?? false,
     });
 
     // footer 숨기기

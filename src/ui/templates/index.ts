@@ -53,7 +53,7 @@ export function editorTemplate(
   const parentAttr = parentId ? `data-parent-id="${parentId}"` : '';
   const commentIdAttr = commentId ? `data-comment-id="${commentId}"` : '';
   const modeClass = mode !== 'create' ? `${prefix}-editor--${mode}` : '';
-  const showStickerBtn = stickerEnabled && mode !== 'edit';
+  const showStickerBtn = stickerEnabled;
 
   return `
     <div class="${prefix}-editor ${modeClass}" ${parentAttr} ${commentIdAttr}>

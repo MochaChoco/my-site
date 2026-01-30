@@ -1,6 +1,6 @@
 {
   "name": "@ogqcorp/comment-box",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Framework-agnostic comment module for web applications",
   "type": "module",
   "main": "dist/comment-box.cjs.js",

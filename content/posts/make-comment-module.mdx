@@ -1,9 +1,9 @@
 ---
 title: "A사 댓글 종료 대응, Vanilla JS 댓글 모듈 자체 개발기"
-description: "A사 댓글 모듈 종료에 대응하여, 프레임워크 독립적인 Vanilla JS 댓글 모듈을 설계·개발하고 Nuxt 3 프로젝트에 통합한 과정을 공유합니다."
+description: "A사 댓글 모듈 종료에 대응하여, 프레임워크 독립적인 Vanilla JS 댓글 모듈을 설계·개발하고 기존에 서비스 중이던 Nuxt 3 프로젝트에 통합한 과정을 공유합니다."
 date: "2026-01-30"
 tags: ["javascript", "architecture"]
-slug: "vanilla-js-comment-module"
+slug: "make-comment-module"
 ---
 
 안녕하세요. 이번 포스트에서는 A사의 댓글 모듈 지원 종료에 대응하여 사내에서 사용할 댓글 모듈을 개발하고, 그것을 현재 서비스 중인 프로젝트와 통합한 과정을 공유하고자 합니다.
@@ -26,11 +26,15 @@ slug: "vanilla-js-comment-module"
   <tbody>
     <tr>
       <td>공지사항 상세</td>
-      <td><code>bManager</code> 옵션으로 작성자 표시</td>
+      <td>
+        <code>bManager</code> 옵션으로 작성자 표시
+      </td>
     </tr>
     <tr>
       <td>이벤트 상세</td>
-      <td><code>allowedComment</code> 플래그</td>
+      <td>
+        <code>allowedComment</code> 플래그
+      </td>
     </tr>
     <tr>
       <td>프로모션 페이지</td>
@@ -142,9 +146,15 @@ class CommentBoxManager {
     return instance;
   }
 
-  destroy(container: string | HTMLElement): void { /* ... */ }
-  destroyAll(): void { /* 모든 인스턴스 일괄 정리 */ }
-  getInstance(container: string | HTMLElement): CommentBoxInstance | undefined { /* ... */ }
+  destroy(container: string | HTMLElement): void {
+    /* ... */
+  }
+  destroyAll(): void {
+    /* 모든 인스턴스 일괄 정리 */
+  }
+  getInstance(container: string | HTMLElement): CommentBoxInstance | undefined {
+    /* ... */
+  }
 }
 
 // 전역 싱글톤으로 export
@@ -165,7 +175,10 @@ interface CommentAPI {
   createComment(objectId: string, data: CreateCommentData): Promise<Comment>;
   updateComment(commentId: string, data: UpdateCommentData): Promise<Comment>;
   deleteComment(commentId: string): Promise<void>;
-  getReplies(parentId: string, params: GetRepliesParams): Promise<GetRepliesResponse>;
+  getReplies(
+    parentId: string,
+    params: GetRepliesParams,
+  ): Promise<GetRepliesResponse>;
   createReply(parentId: string, data: CreateCommentData): Promise<Comment>;
   likeComment(commentId: string): Promise<Comment>;
   unlikeComment(commentId: string): Promise<Comment>;
@@ -288,10 +301,10 @@ interface State {
   totalPages: number;
   isLoading: boolean;
   error: Error | null;
-  expandedReplies: Set<string>;    // 펼쳐진 답글 목록
-  replyEditors: Set<string>;       // 열린 답글 작성 에디터
-  editingComment: string | null;   // 수정 중인 댓글 ID
-  stickerPopupVisible: boolean;    // 스티커 팝업 표시 여부
+  expandedReplies: Set<string>; // 펼쳐진 답글 목록
+  replyEditors: Set<string>; // 열린 답글 작성 에디터
+  editingComment: string | null; // 수정 중인 댓글 ID
+  stickerPopupVisible: boolean; // 스티커 팝업 표시 여부
 }
 ```
 
@@ -424,8 +437,8 @@ private showReplyEditor(parentId: string): void {
 ```typescript
 interface StickerConfig {
   enabled: boolean;
-  groups: StickerGroup[];          // 스티커 그룹(팩) 목록
-  onStickerPurchase?: () => void;  // 빈 그룹일 때 구매 유도 콜백
+  groups: StickerGroup[]; // 스티커 그룹(팩) 목록
+  onStickerPurchase?: () => void; // 빈 그룹일 때 구매 유도 콜백
 }
 ```
 
@@ -464,15 +477,16 @@ private handleStickerSelect(stickerEl: HTMLElement): void {
 전송 시에는 미리보기 영역의 `hidden` 속성과 `dataset`을 확인하여 텍스트 댓글인지 스티커 댓글인지 판별합니다.
 
 ```typescript
-const stickerData = preview && !preview.hasAttribute('hidden')
-  ? {
-      packId: preview.dataset.stickerPackId,
-      stickerId: preview.dataset.stickerId,
-      imageUrl: preview.dataset.stickerImageUrl,
-    }
-  : undefined;
+const stickerData =
+  preview && !preview.hasAttribute("hidden")
+    ? {
+        packId: preview.dataset.stickerPackId,
+        stickerId: preview.dataset.stickerId,
+        imageUrl: preview.dataset.stickerImageUrl,
+      }
+    : undefined;
 
-const content = stickerData ? '' : textarea?.value.trim();
+const content = stickerData ? "" : textarea?.value.trim();
 
 // 텍스트도 스티커도 없으면 전송하지 않음
 if (!content && !stickerData) return;
@@ -483,19 +497,19 @@ if (!content && !stickerData) return;
 스티커 팝업에서 까다로웠던 부분은 외부 클릭 감지였습니다. 팝업 내부, 스티커 버튼, 그 외 영역을 구분해야 했고, 메인 에디터·답글 에디터·수정 에디터에 각각 스티커 버튼이 있을 수 있어 모든 버튼을 순회하며 확인해야 했습니다.
 
 ```typescript
-const cleanupOutsideClick = addEvent(document.body, 'click', (e) => {
+const cleanupOutsideClick = addEvent(document.body, "click", (e) => {
   if (!this.state.stickerPopupVisible) return;
   const popup = this.container.querySelector(`.${prefix}-sticker-popup`);
   const target = e.target as Node;
 
-  if (popup?.contains(target)) return;  // 팝업 내부 클릭
+  if (popup?.contains(target)) return; // 팝업 내부 클릭
 
   const btns = this.container.querySelectorAll(`.${prefix}-sticker-btn`);
   for (const btn of btns) {
-    if (btn.contains(target)) return;   // 스티커 버튼 클릭
+    if (btn.contains(target)) return; // 스티커 버튼 클릭
   }
 
-  this.closeStickerPopup();             // 그 외 → 팝업 닫기
+  this.closeStickerPopup(); // 그 외 → 팝업 닫기
 });
 this.cleanupFunctions.push(cleanupOutsideClick);
 ```
@@ -517,7 +531,7 @@ export default defineConfig({
     },
     rollupOptions: {
       output: {
-        assetFileNames: "comment-box.[ext]",  // CSS 파일명 지정
+        assetFileNames: "comment-box.[ext]", // CSS 파일명 지정
         exports: "named",
       },
     },
@@ -586,8 +600,12 @@ src/server/
 // commentStore.ts
 let store: Comment[] = []; // 서버 프로세스 메모리에 저장
 
-export function getAll() { return store; }
-export function add(comment: Comment) { store.unshift(comment); }
+export function getAll() {
+  return store;
+}
+export function add(comment: Comment) {
+  store.unshift(comment);
+}
 // ...
 ```
 

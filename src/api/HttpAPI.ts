@@ -15,9 +15,15 @@ import type {
  */
 export class HttpAPI implements CommentAPI {
   private baseUrl: string;
+  private defaultHeaders: Record<string, string>;
 
-  constructor(baseUrl: string = '/api/comments') {
+  constructor(baseUrl: string = '/api/comments', options?: { headers?: Record<string, string> }) {
     this.baseUrl = baseUrl;
+    this.defaultHeaders = options?.headers ?? {};
+  }
+
+  private mergeHeaders(extra?: Record<string, string>): Record<string, string> {
+    return { ...this.defaultHeaders, ...extra };
   }
 
   async getComments(params: GetCommentsParams): Promise<GetCommentsResponse> {
@@ -27,7 +33,9 @@ export class HttpAPI implements CommentAPI {
     url.searchParams.set('pageSize', String(params.pageSize));
     if (params.sort) url.searchParams.set('sort', params.sort);
 
-    const res = await fetch(url.toString());
+    const res = await fetch(url.toString(), {
+      headers: this.mergeHeaders(),
+    });
     if (!res.ok) throw new Error(`getComments failed: ${res.status}`);
     return res.json();
   }
@@ -38,7 +46,7 @@ export class HttpAPI implements CommentAPI {
   ): Promise<Comment> {
     const res = await fetch(this.baseUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.mergeHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ objectId, ...data }),
     });
     if (!res.ok) throw new Error(`createComment failed: ${res.status}`);
@@ -51,7 +59,7 @@ export class HttpAPI implements CommentAPI {
   ): Promise<Comment> {
     const res = await fetch(`${this.baseUrl}/${commentId}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.mergeHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(data),
     });
     if (!res.ok) throw new Error(`updateComment failed: ${res.status}`);
@@ -61,6 +69,7 @@ export class HttpAPI implements CommentAPI {
   async deleteComment(commentId: string): Promise<void> {
     const res = await fetch(`${this.baseUrl}/${commentId}`, {
       method: 'DELETE',
+      headers: this.mergeHeaders(),
     });
     if (!res.ok) throw new Error(`deleteComment failed: ${res.status}`);
   }
@@ -76,7 +85,9 @@ export class HttpAPI implements CommentAPI {
     url.searchParams.set('page', String(params.page));
     url.searchParams.set('pageSize', String(params.pageSize));
 
-    const res = await fetch(url.toString());
+    const res = await fetch(url.toString(), {
+      headers: this.mergeHeaders(),
+    });
     if (!res.ok) throw new Error(`getReplies failed: ${res.status}`);
     return res.json();
   }
@@ -87,7 +98,7 @@ export class HttpAPI implements CommentAPI {
   ): Promise<Comment> {
     const res = await fetch(`${this.baseUrl}/${parentId}/replies`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.mergeHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(data),
     });
     if (!res.ok) throw new Error(`createReply failed: ${res.status}`);
@@ -97,6 +108,7 @@ export class HttpAPI implements CommentAPI {
   async likeComment(commentId: string): Promise<Comment> {
     const res = await fetch(`${this.baseUrl}/${commentId}/like`, {
       method: 'POST',
+      headers: this.mergeHeaders(),
     });
     if (!res.ok) throw new Error(`likeComment failed: ${res.status}`);
     return res.json();
@@ -105,6 +117,7 @@ export class HttpAPI implements CommentAPI {
   async unlikeComment(commentId: string): Promise<Comment> {
     const res = await fetch(`${this.baseUrl}/${commentId}/unlike`, {
       method: 'POST',
+      headers: this.mergeHeaders(),
     });
     if (!res.ok) throw new Error(`unlikeComment failed: ${res.status}`);
     return res.json();

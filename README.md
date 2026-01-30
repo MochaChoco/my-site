@@ -508,6 +508,28 @@ CommentBox.init({
 });
 ```
 
+#### 커스텀 헤더
+
+`HttpAPI` 생성자의 두 번째 인자로 `headers`를 전달하면 모든 요청에 포함됩니다.
+좋아요 기능을 사용자별로 구분하려면 서버에서 사용자를 식별할 수 있는 헤더를 전달해야 합니다.
+
+```typescript
+const api = new HttpAPI('/api/comments', {
+  headers: {
+    'X-User-Id': currentUser.id,        // 좋아요 사용자 식별용
+    'Authorization': `Bearer ${token}`,  // 인증 헤더 등 자유롭게 추가 가능
+  },
+});
+
+CommentBox.init({
+  container: '#comment-box',
+  objectId: 'article-123',
+  api,
+});
+```
+
+> **좋아요 동작 방식**: 서버는 `X-User-Id` 헤더로 사용자를 식별하여 좋아요 중복 방지 및 `isLiked` 상태를 사용자별로 반환합니다. 이 헤더가 없으면 좋아요 API가 `401`을 반환하고, 댓글 조회 시 `isLiked`가 항상 `false`로 내려옵니다.
+
 `HttpAPI`는 다음 엔드포인트를 호출합니다:
 
 | 메서드 | HTTP 요청 |
@@ -554,10 +576,18 @@ if (import.meta.client) {
 }
 
 function initCommentBox() {
+  const userId = isAuthorizedUser.value
+    ? getAuthUser.value.customerId
+    : undefined;
+
   CommentBox.init({
     container: '#comment-box',
     objectId: 'article-123',
-    api: HttpAPI ? new HttpAPI('/api/comments') : undefined,
+    api: HttpAPI
+      ? new HttpAPI('/api/comments', {
+          headers: userId ? { 'X-User-Id': userId } : {},
+        })
+      : undefined,
   });
 }
 </script>
